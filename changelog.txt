@@ -1,3 +1,12 @@
+VERSION[beta][2026/11/17]
+
+--- User Interface ---
+* Fix visibiliy of Viscera list on larger screens (Wires77)
+
+--- Other changes ---
+* Release 2.68.1 (github-actions[bot])
+
+
 VERSION[2.68.1][2026/11/17]
 
 --- User Interface ---

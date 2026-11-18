@@ -8,6 +8,19 @@
 local startTime = GetTime()
 APP_NAME = "Path of Building"
 
+-- ==== i18n fork ============================================================
+-- This build carries local internationalization work on top of upstream
+-- Path of Building Community. It must NEVER self-update: the upstream manifest
+-- points at raw.githubusercontent.com, and any file whose SHA1 differs from the
+-- official release (i.e. every file we touch) is treated as corrupt and
+-- re-downloaded, silently wiping the fork's changes.
+--
+-- Upstream changes are merged in git and re-released by the fork maintainer,
+-- so the update paths are switched off rather than allowed to fail.
+FORK_ID = "i18n"
+FORK_NAME = "PoB i18n"
+FORK_VERSION_SUFFIX = "-i18n.1"
+
 SetWindowTitle(APP_NAME)
 ConExecute("set vid_mode 8")
 ConExecute("set vid_resizable 3")
@@ -27,21 +40,19 @@ function launch:OnInit()
 	self.lastUpdateCheck = GetTime()
 	self.subScripts = { }
 	self.startTime = startTime
+	-- Single gate for every update path (startup check, 12h check, Ctrl+U,
+	-- the "Check for Update" button and the first-run bootstrap below).
+	self.forkMode = true
+	self.updatesDisabled = true
 	local firstRunFile = io.open("first.run", "r")
 	if firstRunFile then
 		firstRunFile:close()
 		os.remove("first.run")
-		-- This is a fresh installation
-		-- Perform an immediate update to download the latest version
+		-- Fresh installation. Upstream bootstraps here by downloading the
+		-- latest release; a fork must not, or it would immediately overwrite
+		-- itself with the unlocalized build.
 		ConClear()
-		ConPrintf("Please wait while we complete installation...\n")
-		local updateMode, errMsg = LoadModule("UpdateCheck")
-		if not updateMode then
-			self.updateErrMsg = errMsg
-		elseif updateMode ~= "none" then
-			self:ApplyUpdate(updateMode)
-			return
-		end
+		ConPrintf("First run: keeping the bundled i18n build.\n")
 	end
 	local xml = require("xml")
 	local localManXML = xml.LoadXMLFile("manifest.xml") or xml.LoadXMLFile("../manifest.xml")
@@ -81,8 +92,8 @@ function launch:OnInit()
 		end
 	end
 
-	if not self.devMode and not firstRunFile then
-		-- Run a background update check if developer mode is off
+	if not self.updatesDisabled and not firstRunFile then
+		-- Run a background update check if updates are enabled
 		self:CheckForUpdate(true)
 	end
 end
@@ -134,7 +145,7 @@ function launch:OnFrame()
 		DrawString(0, screenH/2, "CENTER", 24, "FIXED", self.doRestart)
 		Restart()
 	end
-	if not self.devMode and (GetTime() - self.lastUpdateCheck) > 1000*60*60*12 then
+	if not self.updatesDisabled and (GetTime() - self.lastUpdateCheck) > 1000*60*60*12 then
 		-- Do an update check every 12 hours if the user keeps the program open
 		self:CheckForUpdate(true)
 	end
@@ -157,7 +168,7 @@ function launch:OnKeyDown(key, doubleClick)
 			profiling = true
 		end
 	elseif key == "u" and IsKeyDown("CTRL") then
-		if not self.devMode then
+		if not self.updatesDisabled then
 			self:CheckForUpdate()
 		end
 	elseif key == "PRINTSCREEN" and IsKeyDown("CTRL") then
@@ -323,6 +334,9 @@ function launch:DownloadPage(url, callback, params)
 	end
 end
 function launch:ApplyUpdate(mode)
+	if self.updatesDisabled then
+		return
+	end
 	if mode == "basic" then
 		-- Need to revert to the basic environment to fully apply the update
 		LoadModule("UpdateApply")("Update/opFile.txt")
@@ -337,6 +351,10 @@ function launch:ApplyUpdate(mode)
 end
 
 function launch:CheckForUpdate(inBackground)
+	if self.updatesDisabled then
+		-- Fork build: the upstream manifest would replace every localized file.
+		return
+	end
 	if self.updateCheckRunning then
 		return
 	end

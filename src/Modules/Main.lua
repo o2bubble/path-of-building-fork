@@ -250,13 +250,13 @@ function main:Init()
 		self:OpenUpdatePopup()
 	end)
 	self.controls.applyUpdate.shown = function()
-		return launch.updateAvailable and launch.updateAvailable ~= "none"
+		return not launch.updatesDisabled and launch.updateAvailable and launch.updateAvailable ~= "none"
 	end
 	self.controls.checkUpdate = new("ButtonControl"):ButtonControl({"BOTTOMLEFT",self.anchorMain,"BOTTOMLEFT"}, {0, -24, 140, 20}, "", function()
 		launch:CheckForUpdate()
 	end)
 	self.controls.checkUpdate.shown = function()
-		return not launch.devMode and (not launch.updateAvailable or launch.updateAvailable == "none")
+		return not launch.updatesDisabled and (not launch.updateAvailable or launch.updateAvailable == "none")
 	end
 	self.controls.checkUpdate.label = function()
 		return launch.updateCheckRunning and launch.updateProgress or "Check for Update"
@@ -266,11 +266,13 @@ function main:Init()
 	end
 	self.controls.forkLabel = new("LabelControl"):LabelControl({"BOTTOMLEFT",self.anchorMain,"BOTTOMLEFT"}, {148, -26, 0, 16}, "")
 	self.controls.forkLabel.label = function()
-		return "^8PoB Community Fork"
+		return "^8" .. (launch.forkMode and FORK_NAME or "PoB Community Fork")
 	end
 	self.controls.versionLabel = new("LabelControl"):LabelControl({"BOTTOMLEFT",self.anchorMain,"BOTTOMLEFT"}, {148, -2, 0, 16}, "")
 	self.controls.versionLabel.label = function()
-		return "^8" .. (launch.versionBranch == "beta" and "Beta: " or "Version: ") .. launch.versionNumber .. (launch.versionBranch == "dev" and " (Dev)" or "")
+		return "^8" .. (launch.versionBranch == "beta" and "Beta: " or "Version: ") .. launch.versionNumber
+			.. (launch.forkMode and FORK_VERSION_SUFFIX or "")
+			.. (launch.versionBranch == "dev" and " (Dev)" or "")
 	end
 	self.controls.devMode = new("LabelControl"):LabelControl({"BOTTOMLEFT",self.anchorMain,"BOTTOMLEFT"}, {0, -26, 0, 20}, colorCodes.NEGATIVE.."Dev Mode")
 	self.controls.devMode.shown = function()

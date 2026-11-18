@@ -108,6 +108,15 @@ function launch:OnInit()
 	-- Localization. Hooks the engine's text functions, so it has to be in place
 	-- before any module draws; the dictionary is optional and a build without
 	-- one is byte-identical to upstream.
+	--
+	-- The utf8 table has to exist before Modules/Main runs: main:Init() detects
+	-- it as "this host can handle non-ASCII input" and that flag widens every
+	-- EditControl's default input filter from "^%w%p " (which silently eats
+	-- CJK) to "%c".
+	if not _G.utf8 then
+		local ok, mod = pcall(require, "lua-utf8")
+		if ok and type(mod) == "table" then _G.utf8 = mod end
+	end
 	POB_I18N = LoadModule("Modules/I18n")
 	POB_I18N.Load(find_i18n_dir(), i18n_locale())
 	POB_I18N.Install()
@@ -115,6 +124,10 @@ function launch:OnInit()
 	ConPrintf("Loading main script...")
 	local errMsg
 	errMsg, self.main = PLoadModule("Modules/Main")
+
+	-- matchOrPattern is defined in Modules/Common, which Main loads; the search
+	-- wrapper can only attach once that has run.
+	POB_I18N.InstallSearch()
 	if errMsg then
 		self:ShowErrMsg("Error loading main script: %s", errMsg)
 	elseif not self.main then

@@ -26,7 +26,9 @@ local GemSelectClass = newClass("GemSelectControl", "EditControl")
 ---@param forceTooltip boolean
 ---@param imbued boolean
 function GemSelectClass:GemSelectControl(anchor, rect, skillsTab, index, changeFunc, forceTooltip, imbued)
-	self:EditControl(anchor, rect, nil, nil, "^ %a':-")
+	-- The ASCII-only filter stripped every CJK byte, so a gem could not be
+	-- searched by its translated name even once the input path supported it.
+	self:EditControl(anchor, rect, nil, nil, main.unicode and "%c" or "^ %a':-")
 	self.controls.scrollBar = new("ScrollBarControl"):ScrollBarControl({ "TOPRIGHT", self, "TOPRIGHT" }, {-1, 0, 18, 0}, (self.height - 4) * 4)
 	self.controls.scrollBar.y = function()
 		local width, height = self:GetSize()

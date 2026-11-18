@@ -108,8 +108,11 @@ end
 
 function i18n.Load(dataDir, locale)
 	i18n.entries = { }
+	-- Lowercased view of the keys. Every search predicate lowercases the
+	-- haystack before matching (searchName:lower(), label:lower()), so without
+	-- this the lookup always misses on capitalised names.
+	i18n.lower = { }
 	i18n.templates = { }   -- placeholder keys, grouped by slot count
-	i18n.byFirstChar = { } -- optimisation: bucket by first byte
 	i18n.lang = locale
 	i18n.loaded = false
 
@@ -152,6 +155,8 @@ function i18n.Load(dataDir, locale)
 						-- Entries are stored JSON-escaped ("\\n"), and so is the
 						-- string POB draws at runtime, so no unescaping is done.
 						i18n.entries[k] = v
+						local low = k:lower()
+						if i18n.lower[low] == nil then i18n.lower[low] = v end
 						-- Index templates by (slot count, leading literal) so a
 						-- lookup narrows to a handful of candidates instead of
 						-- scanning tens of thousands of keys per drawn string.
@@ -265,6 +270,45 @@ function i18n.TranslateColoured(text)
 		out[#out + 1] = parts[i]
 	end
 	return table.concat(out)
+end
+
+-- ==== search ===============================================================
+
+local function hasNonAscii(s)
+	return s ~= nil and s:find("[\128-\255]") ~= nil
+end
+
+-- POB searches the English source because that is what it stores; the user
+-- types what they see, which is the translation. Every one of the search
+-- predicates funnels through string.matchOrPattern (13 call sites: config tab,
+-- item DB, minion list, anoint popup, tree view, ...), so wrapping that one
+-- function covers them all. The wrapper only fires for a non-ASCII query --
+-- an English search must not pay for a table lookup per row.
+--
+-- Translating the haystack is safe with a Lua pattern: the pattern is parsed,
+-- the haystack is data, so a translation containing "%" or "(" cannot break
+-- the match.
+function i18n.InstallSearch()
+	if i18n.searchInstalled then return end
+	local orig = string.matchOrPattern
+	if type(orig) ~= "function" then
+		ConPrintf("[i18n] matchOrPattern not available yet; search stays English-only")
+		return
+	end
+	i18n.searchInstalled = true
+	ConPrintf("[i18n] search hook installed")
+
+	function string.matchOrPattern(self, pattern)
+		if orig(self, pattern) then return true end
+		if not i18n.loaded or not hasNonAscii(pattern) then return false end
+		-- Callers lowercase the haystack before searching (searchName:lower()),
+		-- but dictionary keys keep their original capitalisation, so try the
+		-- text as given and then a title-cased probe for the shapes POB uses
+		-- ("Abberath's Hooves, Goathide Boots").
+		local zh = i18n.lower[self]
+		if not zh then return false end
+		return orig(zh, pattern)
+	end
 end
 
 -- ==== engine hooks =========================================================

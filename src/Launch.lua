@@ -29,7 +29,33 @@ ConExecute("set vid_resizable 3")
 launch = { }
 SetMainObject(launch)
 jit.opt.start('maxtrace=4000','maxmcode=8192')
+if os.getenv("POB_NO_JIT") then require("jit").off() print("JIT off via env") end
 collectgarbage("setpause", 400)
+
+-- Where the translation dictionaries live, if any are installed.
+-- Search order: POB_I18N_DIRECTORY (explicit), then Data/<game>/ next to the
+-- script folder, then next to the runtime. Returns nil when nothing is found,
+-- and Load() then leaves every string in English.
+local function find_i18n_dir()
+	local candidates = { }
+	local env = os.getenv("POB_I18N_DIRECTORY")
+	if env and env ~= "" then candidates[#candidates + 1] = env end
+	local scriptPath = GetScriptPath()
+	if scriptPath then candidates[#candidates + 1] = scriptPath .. "/../Data/poe1" end
+	local runtimePath = GetRuntimePath()
+	if runtimePath then candidates[#candidates + 1] = runtimePath .. "/Data/poe1" end
+	for _, dir in ipairs(candidates) do
+		local probe = io.open(dir .. "/zh-rCN/meta.json", "rb")
+		if probe then probe:close() return dir end
+	end
+	return nil
+end
+
+local function i18n_locale()
+	local env = os.getenv("POB_I18N_LOCALE")
+	if env and env ~= "" then return env end
+	return "zh-rCN"
+end
 
 function launch:OnInit()
 	self.devMode = false
@@ -78,6 +104,14 @@ function launch:OnInit()
 		installedFile:close()
 	end
 	RenderInit("DPI_AWARE")
+
+	-- Localization. Hooks the engine's text functions, so it has to be in place
+	-- before any module draws; the dictionary is optional and a build without
+	-- one is byte-identical to upstream.
+	POB_I18N = LoadModule("Modules/I18n")
+	POB_I18N.Load(find_i18n_dir(), i18n_locale())
+	POB_I18N.Install()
+
 	ConPrintf("Loading main script...")
 	local errMsg
 	errMsg, self.main = PLoadModule("Modules/Main")

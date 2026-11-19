@@ -32,18 +32,27 @@ jit.opt.start('maxtrace=4000','maxmcode=8192')
 if os.getenv("POB_NO_JIT") then require("jit").off() print("JIT off via env") end
 collectgarbage("setpause", 400)
 
--- Where the translation dictionaries live, if any are installed.
--- Search order: POB_I18N_DIRECTORY (explicit), then Data/<game>/ next to the
--- script folder, then next to the runtime. Returns nil when nothing is found,
--- and Load() then leaves every string in English.
+-- Where the translation dictionaries live, if any are installed. Each locale
+-- is a directory under it, named by manifest.json.
+-- Search order: POB_I18N_DIRECTORY (explicit), then i18n/ next to the script
+-- folder, then next to the runtime, then the pre-manifest Data/poe1 layout.
+-- Returns nil when nothing is found, and Load() then leaves every string in
+-- English.
 local function find_i18n_dir()
 	local candidates = { }
 	local env = os.getenv("POB_I18N_DIRECTORY")
 	if env and env ~= "" then candidates[#candidates + 1] = env end
 	local scriptPath = GetScriptPath()
-	if scriptPath then candidates[#candidates + 1] = scriptPath .. "/../Data/poe1" end
+	if scriptPath then candidates[#candidates + 1] = scriptPath .. "/../i18n" end
 	local runtimePath = GetRuntimePath()
+	if runtimePath then candidates[#candidates + 1] = runtimePath .. "/i18n" end
+	if scriptPath then candidates[#candidates + 1] = scriptPath .. "/../Data/poe1" end
 	if runtimePath then candidates[#candidates + 1] = runtimePath .. "/Data/poe1" end
+	for _, dir in ipairs(candidates) do
+		local probe = io.open(dir .. "/manifest.json", "rb")
+		if probe then probe:close() return dir end
+	end
+	-- Pre-manifest installs have a bare locale directory and no manifest.
 	for _, dir in ipairs(candidates) do
 		local probe = io.open(dir .. "/zh-rCN/meta.json", "rb")
 		if probe then probe:close() return dir end
@@ -54,7 +63,7 @@ end
 local function i18n_locale()
 	local env = os.getenv("POB_I18N_LOCALE")
 	if env and env ~= "" then return env end
-	return "zh-rCN"
+	return nil -- resolved from the manifest once the directory is known
 end
 
 function launch:OnInit()
@@ -118,7 +127,9 @@ function launch:OnInit()
 		if ok and type(mod) == "table" then _G.utf8 = mod end
 	end
 	POB_I18N = LoadModule("Modules/I18n")
-	POB_I18N.Load(find_i18n_dir(), i18n_locale())
+	local i18nDir = find_i18n_dir()
+	POB_I18N.baseDir = i18nDir
+	POB_I18N.Load(i18nDir, i18n_locale() or POB_I18N.DefaultLocale())
 	POB_I18N.Install()
 
 	ConPrintf("Loading main script...")

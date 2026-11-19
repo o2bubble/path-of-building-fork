@@ -355,7 +355,82 @@ function i18n.NormaliseItemText(raw)
 	return result
 end
 
+-- ==== locale discovery ======================================================
+--
+-- i18n/ holds one directory per locale plus a manifest naming them. The
+-- manifest is what ships in the repository; the dictionary payloads are
+-- distributed separately, so a locale listed there may be absent on disk and
+-- must not be offered.
+
+local function fileExists(path)
+	local f = io.open(path, "rb")
+	if f then f:close() return true end
+	return false
+end
+
+local function readManifest(baseDir)
+	if not baseDir then return nil end
+	local f = io.open(baseDir .. "/manifest.json", "rb")
+	if not f then return nil end
+	local text = f:read("*a")
+	f:close()
+	local dkjson = require("dkjson")
+	local ok, doc = pcall(dkjson.decode, text, 1, nil)
+	if ok and type(doc) == "table" then
+		return doc
+	end
+	ConPrintf("[i18n] could not parse %s/manifest.json", baseDir)
+	return nil
+end
+
+-- Locales the user can pick, in display order: the built-in default first,
+-- then everything the manifest names that is actually present on disk. The
+-- engine offers no directory enumeration, so the manifest is authoritative —
+-- add an entry there and drop the folder in to add a language.
+function i18n.AvailableLocales()
+	local list = { { id = "en", name = "Default", nativeName = "Default (English)" } }
+	local seen = { en = true }
+	local manifest = readManifest(i18n.baseDir)
+	if manifest and type(manifest.locales) == "table" then
+		for _, entry in ipairs(manifest.locales) do
+			if type(entry) == "table" and type(entry.id) == "string" and not seen[entry.id]
+				and fileExists(i18n.baseDir .. "/" .. entry.id .. "/meta.json") then
+				seen[entry.id] = true
+				t_insert(list, {
+					id = entry.id,
+					name = entry.name or entry.id,
+					nativeName = entry.nativeName or entry.name or entry.id,
+				})
+			end
+		end
+	end
+	return list
+end
+
+function i18n.LocaleExists(locale)
+	return locale == "en" or (i18n.baseDir ~= nil and fileExists(i18n.baseDir .. "/" .. locale .. "/meta.json"))
+end
+
+-- The locale to use when no preference has been saved.
+function i18n.DefaultLocale()
+	local manifest = readManifest(i18n.baseDir)
+	if manifest and type(manifest.defaultLocale) == "string" and i18n.LocaleExists(manifest.defaultLocale) then
+		return manifest.defaultLocale
+	end
+	return "en"
+end
+
+-- Reload with another locale. Safe to call while running: the drawing hooks
+-- stay installed and read the current tables on every string.
+function i18n.SetLocale(locale)
+	if not locale or locale == i18n.lang then
+		return
+	end
+	i18n.Load(i18n.baseDir, locale)
+end
+
 function i18n.Load(dataDir, locale)
+	i18n.baseDir = dataDir
 	i18n.entries = { }
 	-- Lowercased view of the keys. Every search predicate lowercases the
 	-- haystack before matching (searchName:lower(), label:lower()), so without

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "defaultLocale": "zh-rCN",
+  "locales": [
+    {
+      "id": "zh-rCN",
+      "name": "Simplified Chinese",
+      "nativeName": "简体中文"
+    }
+  ]
+}

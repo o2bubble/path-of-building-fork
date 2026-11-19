@@ -124,6 +124,9 @@ function main:Init()
 	self.showAllItemAffixes = true
 	self.disableScrollControlInteraction = false
 	self.errorReadingSettings = false
+	-- Which dictionary the UI draws with. Launch already picked one from the
+	-- manifest; LoadSettings may override it with the saved preference.
+	self.language = POB_I18N and POB_I18N.lang or "en"
 	
 	if not SetDPIScaleOverridePercent then SetDPIScaleOverridePercent = function(scale) end end
 
@@ -692,6 +695,10 @@ function main:LoadSettings(ignoreBuild)
 					self.dpiScaleOverridePercent = tonumber(node.attrib.dpiScaleOverridePercent) or 0
 					SetDPIScaleOverridePercent(self.dpiScaleOverridePercent)
 				end
+				if node.attrib.language and POB_I18N and POB_I18N.LocaleExists(node.attrib.language) then
+					self.language = node.attrib.language
+					POB_I18N.SetLocale(self.language)
+				end
 			end
 		end
 	end
@@ -825,6 +832,7 @@ function main:SaveSettings()
 		showAllItemAffixes = tostring(self.showAllItemAffixes),
 		disableScrollControlInteraction = tostring(self.disableScrollControlInteraction),
 		dpiScaleOverridePercent = tostring(self.dpiScaleOverridePercent),
+		language = self.language,
 	} })
 	local res, errMsg = common.xml.SaveXMLFile(setXML, self.userPath.."Settings.xml")
 	if not res then
@@ -910,7 +918,8 @@ function main:OpenOptionsPopup(savedState)
 		showAnimations = self.showAnimations,
 		showAllItemAffixes = self.showAllItemAffixes,
 		disableScrollControlInteraction = self.disableScrollControlInteraction,
-		dpiScaleOverridePercent = self.dpiScaleOverridePercent
+		dpiScaleOverridePercent = self.dpiScaleOverridePercent,
+		language = self.language
 	}
 
 	-- NOTE: Height needs to be adjusted if more menu options are added
@@ -951,6 +960,25 @@ function main:OpenOptionsPopup(savedState)
 	local defaultLabelPlacementX = columnWidth*0.45
 
 	drawSectionHeader("app", "Application options")
+
+	-- Language picker. The list comes from i18n/manifest.json, so shipping
+	-- another locale only means adding its directory and a manifest entry.
+	-- Locale names are shown in their own script so a user who cannot read the
+	-- current UI language can still find theirs.
+	if POB_I18N then
+		local localeList = { }
+		for _, locale in ipairs(POB_I18N.AvailableLocales()) do
+			localeList[#localeList + 1] = { label = locale.nativeName, id = locale.id }
+		end
+		controls.language = new("DropDownControl"):DropDownControl({ "TOPLEFT", controls.sectionAnchor, "TOPLEFT" }, { currentX + defaultLabelPlacementX, currentY, 150, 18 }, localeList, function(index, value)
+			self.language = value.id
+			POB_I18N.SetLocale(value.id)
+		end)
+		controls.languageLabel = new("LabelControl"):LabelControl({ "RIGHT", controls.language, "LEFT" }, { defaultLabelSpacingPx, 0, 0, 16 }, "^7Language:")
+		controls.language.tooltipText = "Language used for item names, stats and interface text.\nDefault draws the original English."
+		controls.language:SelByValue(self.language, "id")
+		nextRow()
+	end
 
 	controls.connectionProtocol = new("DropDownControl"):DropDownControl({ "TOPLEFT", controls.sectionAnchor, "TOPLEFT" }, { currentX + defaultLabelPlacementX, currentY, 100, 18 }, {
 		{ label = "Auto", protocol = 0 },
@@ -1273,6 +1301,10 @@ function main:OpenOptionsPopup(savedState)
 		self.disableScrollControlInteraction = savedState.disableScrollControlInteraction
 		self.dpiScaleOverridePercent = savedState.dpiScaleOverridePercent
 		SetDPIScaleOverridePercent(self.dpiScaleOverridePercent)
+		if savedState.language and savedState.language ~= self.language then
+			self.language = savedState.language
+			POB_I18N.SetLocale(self.language)
+		end
 		main:ClosePopup()
 	end)
 	

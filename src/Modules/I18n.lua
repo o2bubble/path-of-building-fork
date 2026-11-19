@@ -92,7 +92,13 @@ local function matchPlaceholders(key, text)
 	pattern = pattern .. "$"
 
 	local caps = { text:match(pattern) }
-	if #caps ~= #slots then return nil end
+	-- A failed match yields no captures, which is indistinguishable from a
+	-- template whose slots all failed to parse. Without this check such a key
+	-- "matches" any text with the same numeric-token count and prefix, and
+	-- substitutes its whole translation -- that is how a resist breakdown line
+	-- turned into a league-transfer string. Every indexed key has at least one
+	-- slot, so a real match always produces a capture (possibly empty).
+	if caps[1] == nil or #caps ~= #slots then return nil end
 	local values = { }
 	for i, slot in ipairs(slots) do
 		values[slot] = caps[i]
@@ -107,6 +113,18 @@ local function fillPlaceholders(template, values)
 		if v == nil then return "{" .. slot .. "}" end
 		return v
 	end))
+end
+
+-- The game's own strings carry display markup POB knows nothing about, and it
+-- draws whatever it is handed, so "<rgb(155,55,55)>" would appear literally.
+-- Keep the colour the source asked for by turning it into POB's ^xRRGGBB code,
+-- then drop every other tag.
+local function sanitizeMarkup(s)
+	if not s:find("<", 1, true) then return s end
+	s = s:gsub("<rgb%(%s*(%d+)%s*,%s*(%d+)%s*,%s*(%d+)%s*%)>", function(r, g, b)
+		return string.format("^x%02X%02X%02X", r, g, b)
+	end)
+	return (s:gsub("</?[%a:][^>]*>", ""))
 end
 
 function i18n.Load(dataDir, locale)
@@ -157,6 +175,7 @@ function i18n.Load(dataDir, locale)
 					if type(k) == "string" and type(v) == "string" and v ~= "" and v ~= k then
 						-- Entries are stored JSON-escaped ("\\n"), and so is the
 						-- string POB draws at runtime, so no unescaping is done.
+						v = sanitizeMarkup(v)
 						i18n.entries[k] = v
 						-- Lua long-bracket literals ([=[...]=]) drop the newline
 						-- after the opener but keep the one before the closer, so
@@ -247,7 +266,10 @@ function i18n.Translate(text)
 			-- Literal-prefix templates ("Grants {0}% ...") and leading-placeholder
 			-- templates ("{0} points to node") live in different buckets.
 			local head = text:sub(1, 2)
-			local afterNumber = text:match("^%-?%d+%.?%d*%s*(..)")
+			-- A leading "+" is common ("%+g" formats signed mods that way) and
+			-- must count as part of the number, or the literal that follows it
+			-- cannot be derived and the lookup never reaches the right bucket.
+			local afterNumber = text:match("^[%+%-]?%d+%.?%d*%s*(..)")
 			for _, which in ipairs(afterNumber and { head, afterNumber } or { head }) do
 				local keys = bucket[which]
 				if keys then

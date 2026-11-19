@@ -139,6 +139,7 @@
     "Compare with:": "对比构筑:",
     "Show legacy gems:": "显示旧版宝石:",
     "Show support gems:": "显示辅助宝石:",
-    "^7Usage Tips:\n- You can copy/paste socket groups using Ctrl+C and Ctrl+V.\n- Ctrl + Click to enable/disable socket groups.\n- Ctrl + Right click to include/exclude in FullDPS calculations.\n- Right click to set as the Main skill group.\n": "^7使用提示:\n- 可以用 Ctrl+C 和 Ctrl+V 复制/粘贴技能组。\n- Ctrl + 单击可启用/禁用技能组。\n- Ctrl + 右键单击可纳入/排除完整DPS计算。\n- 右键单击可设为主技能组。\n"
+    "^7Usage Tips:\n- You can copy/paste socket groups using Ctrl+C and Ctrl+V.\n- Ctrl + Click to enable/disable socket groups.\n- Ctrl + Right click to include/exclude in FullDPS calculations.\n- Right click to set as the Main skill group.\n": "^7使用提示:\n- 可以用 Ctrl+C 和 Ctrl+V 复制/粘贴技能组。\n- Ctrl + 单击可启用/禁用技能组。\n- Ctrl + 右键单击可纳入/排除完整DPS计算。\n- 右键单击可设为主技能组。\n",
+    "Min: {0}%": "下限: {0}%"
   }
 }

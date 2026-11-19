@@ -18,6 +18,9 @@
 
 local i18n = { }
 
+-- Set to true by hand when tracing how a pasted item is reverse-translated.
+i18n.debugItem = false
+
 local t_insert = table.insert
 local ipairs = ipairs
 local pairs = pairs
@@ -127,6 +130,231 @@ local function sanitizeMarkup(s)
 	return (s:gsub("</?[%a:][^>]*>", ""))
 end
 
+-- ==== reverse lookup ========================================================
+--
+-- Items copied from the game in a Chinese client are Chinese, but every item
+-- parser downstream matches English keywords ("Rarity:", "Item Level:") and
+-- English stat lines. The dictionary already maps those to Chinese, so the
+-- same data read backwards turns a Chinese item back into the English text
+-- POB knows how to parse.
+
+local function buildReverseIndex()
+	i18n.revExact = { }
+	i18n.revTemplates = { }
+	for k, v in pairs(i18n.entries) do
+		if k ~= v then
+			local slots = 0
+			for _ in v:gmatch("{%d+[^}]*}") do slots = slots + 1 end
+			if slots > 0 then
+				local bucket = i18n.revTemplates[slots]
+				if not bucket then bucket = { } i18n.revTemplates[slots] = bucket end
+				local lead = v:match("^([^{]*)")
+				local first = (#lead >= 2 and lead:sub(1, 2)) or v:match("^{%d+[^}]*}%s*(..)")
+				if first and #first > 0 then
+					bucket[first] = bucket[first] or { }
+					t_insert(bucket[first], { zh = v, en = k })
+				end
+			else
+				-- Several English keys can share one translation ("智慧" is both
+				-- "Int" and "Intelligence"). Keep the shortest: it is the plain
+				-- word rather than a longer composite that happens to include it.
+				local cur = i18n.revExact[v]
+				if cur == nil or #k < #cur then
+					i18n.revExact[v] = k
+				end
+			end
+		end
+	end
+	-- Within one bucket, try the longest English key first: "+23 智慧" must
+	-- resolve to "+23 to Intelligence", not the abbreviation "+23 Int".
+	local function byLengthDesc(a, b)
+		return #a.en > #b.en
+	end
+	for _, bucket in pairs(i18n.revTemplates) do
+		for _, list in pairs(bucket) do
+			table.sort(list, byLengthDesc)
+		end
+	end
+end
+
+-- The dictionary keeps the game's "[English|Chinese]" term markup in some
+-- values. Reading one back must yield just the term, or the parser sees
+-- "+23 to [Intelligence|Intelligence]".
+local function stripTermMarkup(s)
+	if not s:find("[", 1, true) then return s end
+	s = s:gsub("%[([^%|%]]+)%|([^%|%]]+)%]", "%2")
+	return (s:gsub("%[([^%|%]]+)%]", "%1"))
+end
+
+-- Translate one Chinese line back to English, or nil when nothing matches.
+function i18n.ReverseTranslate(zhText)
+	if not i18n.loaded or type(zhText) ~= "string" or #zhText == 0 then return nil end
+	local direct = i18n.revExact[zhText]
+	if direct then return stripTermMarkup(direct) end
+	if not zhText:find("%d") then return nil end
+	local slots = select(2, zhText:gsub("%-?%d+%.?%d*", ""))
+	local bucket = i18n.revTemplates[slots]
+	if not bucket then return nil end
+	local head = zhText:sub(1, 2)
+	local afterNumber = zhText:match("^[%+%-]?%d+%.?%d*%s*(..)")
+	for _, which in ipairs(afterNumber and { head, afterNumber } or { head }) do
+		local list = bucket[which]
+		if list then
+			for _, tpl in ipairs(list) do
+				local values = matchPlaceholders(tpl.zh, zhText)
+				if values then
+					local en = fillPlaceholders(tpl.en, values)
+					-- A slot present in the English key but absent from the
+					-- Chinese one survives substitution; that is not a match.
+					if not en:find("{", 1, true) then
+						return stripTermMarkup(en)
+					end
+				end
+			end
+		end
+	end
+	return nil
+end
+
+-- Keywords the item parser matches literally. The Chinese client renders the
+-- rarity line with a space between every character ("稀 有 度: 稀有"), so the
+-- caller matches against a space-stripped copy.
+local ITEM_RARITY = {
+	["普通"] = "NORMAL",
+	["魔法"] = "MAGIC",
+	["稀有"] = "RARE",
+	["传奇"] = "UNIQUE",
+	["遗物"] = "RELIC",
+}
+
+local ITEM_SPEC = {
+	["物品类别"] = "Item Class",
+	["物品等级"] = "Item Level",
+	["需求"] = "Requirements",
+	["等级"] = "Level",
+	["力量"] = "Strength",
+	["敏捷"] = "Dexterity",
+	["智慧"] = "Intelligence",
+	["品质"] = "Quality",
+	["护甲"] = "Armour",
+	["闪避值"] = "Evasion Rating",
+	["能量护盾"] = "Energy Shield",
+	["攻击速度"] = "Attacks per Second",
+	["暴击几率"] = "Critical Strike Chance",
+	["物理伤害"] = "Physical Damage",
+	["元素伤害"] = "Elemental Damage",
+	["每秒攻击次数"] = "Attacks per Second",
+}
+
+local ITEM_FLAG = {
+	["已腐化"] = "Corrupted",
+	["已复制"] = "Mirrored",
+	["已污染"] = "Corrupted",
+}
+
+local ITEM_CLASS = {
+	["戒指"] = "Ring",
+	["护身符"] = "Amulet",
+	["腰带"] = "Belt",
+	["头盔"] = "Helmet",
+	["胸甲"] = "Body Armour",
+	["手套"] = "Gloves",
+	["鞋子"] = "Boots",
+	["盾"] = "Shield",
+	["箭袋"] = "Quiver",
+	["药剂"] = "Flask",
+	["珠宝"] = "Jewel",
+	["法杖"] = "Staff",
+	["长杖"] = "Staff",
+	["弓"] = "Bow",
+	["爪"] = "Claw",
+	["匕首"] = "Dagger",
+	["单手剑"] = "One Handed Sword",
+	["双手剑"] = "Two Handed Sword",
+	["单手斧"] = "One Handed Axe",
+	["双手斧"] = "Two Handed Axe",
+	["单手锤"] = "One Handed Mace",
+	["双手锤"] = "Two Handed Mace",
+	["权杖"] = "Sceptre",
+	["战杖"] = "Warstaff",
+	["鱼竿"] = "Fishing Rod",
+	["地图"] = "Map",
+}
+
+-- Turn a Chinese item into the English text the item parser expects. Lines
+-- that map to nothing (rare item names, flavour text) are left untouched, so
+-- they keep displaying in Chinese.
+function i18n.NormaliseItemText(raw)
+	if not i18n.loaded or type(raw) ~= "string" or not raw:find("[\128-\255]") then
+		return raw
+	end
+	local out = { }
+	local itemClassLine
+	local sawRarity = false
+	local function emit(text)
+		out[#out + 1] = text
+	end
+	for line in (raw .. "\n"):gmatch("(.-)\n") do
+		local squashed = line:gsub("%s+", "")
+		local replaced
+		local EnglishRarity = squashed:match("^Rarity:(%a+)$")
+		local rarity = squashed:match("^稀有度:(.+)$")
+		if EnglishRarity then
+			-- Already-English rarity (the item editor prepends one). Remember it
+			-- so a Chinese rarity line further down is dropped instead of
+			-- being read as the item name.
+			sawRarity = true
+			replaced = line
+		elseif rarity and ITEM_RARITY[rarity] then
+			-- A caller may have prepended its own "Rarity: X" already; keep the
+			-- first one only, or the second ends up read as the item name.
+			if not sawRarity then
+				sawRarity = true
+				replaced = "Rarity: " .. ITEM_RARITY[rarity]
+			else
+				replaced = "\0drop"
+			end
+		else
+			local name, value = squashed:match("^([^:]+):(.*)$")
+			if name == "物品类别" then
+				-- The parser only expects Item Class first; a Chinese client puts
+				-- it there too, but whoever calls us may have inserted a rarity
+				-- line above it. Emit it out of band and place it first.
+				itemClassLine = "Item Class: " .. (ITEM_CLASS[value] or value)
+				replaced = "\0drop"
+			else
+				local spec = name and ITEM_SPEC[name]
+				if spec then
+					-- The value of a spec line is a plain enum ("戒指"), not a
+					-- stat line, so look it up directly before trying templates.
+					local mapped = value ~= "" and (i18n.revExact[value] or i18n.ReverseTranslate(value)) or nil
+					replaced = value ~= "" and (spec .. ": " .. (mapped or value)) or (spec .. ":")
+				elseif ITEM_FLAG[squashed] then
+					replaced = ITEM_FLAG[squashed]
+				elseif squashed == "稀有度" or squashed == "物品类别" then
+					replaced = "\0drop"
+				end
+			end
+		end
+		if replaced == "\0drop" then
+			-- dropped, see above
+		elseif replaced then
+			emit(replaced)
+		else
+			emit(i18n.ReverseTranslate(line) or line)
+		end
+	end
+	if itemClassLine then
+		t_insert(out, 1, itemClassLine)
+	end
+	local result = table.concat(out, "\n")
+	if i18n.debugItem then
+		ConPrintf("[i18n-item] IN : %s", (raw:gsub("\n", " | ")))
+		ConPrintf("[i18n-item] OUT: %s", (result:gsub("\n", " | ")))
+	end
+	return result
+end
+
 function i18n.Load(dataDir, locale)
 	i18n.entries = { }
 	-- Lowercased view of the keys. Every search predicate lowercases the
@@ -222,6 +450,9 @@ function i18n.Load(dataDir, locale)
 		end
 	end
 	i18n.loaded = total > 0
+	if i18n.loaded then
+		buildReverseIndex()
+	end
 	ConPrintf("[i18n] loaded %d entries (%s)", total, locale)
 end
 

@@ -301,13 +301,46 @@ function convertUTF8to16(text, offset)
 end
 
 --- Clean item text by removing or replacing unsupported or redundant characters or sequences
+-- True when every byte at or above 0x80 starts a well-formed UTF-8 sequence.
+local function isValidUTF8(text)
+	local i, n = 1, #text
+	while i <= n do
+		local b = text:byte(i)
+		if b < 0x80 then
+			i = i + 1
+		else
+			local extra
+			if b >= 0xC2 and b <= 0xDF then
+				extra = 1
+			elseif b >= 0xE0 and b <= 0xEF then
+				extra = 2
+			elseif b >= 0xF0 and b <= 0xF4 then
+				extra = 3
+			else
+				return false
+			end
+			for k = 1, extra do
+				local c = text:byte(i + k)
+				if not c or c < 0x80 or c > 0xBF then
+					return false
+				end
+			end
+			i = i + extra + 1
+		end
+	end
+	return true
+end
+
 ---@param text string
 ---@return string
 function sanitiseText(text)
 	if not text then return nil end
 	-- Something something unicode support something grumble
 	-- Only do these replacements if a char from 128-255 or '<' is found first
-	return text:find("[\128-\255<]") and text
+	if not text:find("[\128-\255<]") then
+		return text
+	end
+	local common = text
 		:gsub("%b<>", "")
 		:gsub("\226\128\144", "-") -- U+2010 HYPHEN
 		:gsub("\226\128\145", "-") -- U+2011 NON-BREAKING HYPHEN
@@ -319,6 +352,15 @@ function sanitiseText(text)
 		:gsub("\226\136\146", "-") -- U+2212 MINUS SIGN
 		:gsub("\195\164", "a") -- U+00E4 LATIN SMALL LETTER A WITH DIAERESIS
 		:gsub("\195\182", "o") -- U+00F6 LATIN SMALL LETTER O WITH DIAERESIS
+	if isValidUTF8(text) then
+		-- The remaining fix-ups are single-byte Windows-1252 substitutions.
+		-- Applied to UTF-8 they hit the trailing bytes of multi-byte characters
+		-- (0x97 is the middle of 痕, 0xE4 the start of 之), then the catch-all
+		-- strips everything left: "术痕 之眼" became "?????-? a?????". A
+		-- well-formed UTF-8 item has nothing to fix here.
+		return common
+	end
+	return common
 		-- single-byte: Windows-1252 and similar
 		:gsub("\150", "-") -- U+2013 EN DASH
 		:gsub("\151", "-") -- U+2014 EM DASH
@@ -326,7 +368,6 @@ function sanitiseText(text)
 		:gsub("\246", "o") -- U+00F6 LATIN SMALL LETTER O WITH DIAERESIS
 		-- unsupported
 		:gsub("[\128-\255]", "?")
-		or text
 end
 
 -- Convert int to 4 bytes string

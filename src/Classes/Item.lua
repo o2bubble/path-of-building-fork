@@ -93,6 +93,12 @@ local ItemClass = newClass("Item")
 
 function ItemClass:Item(raw, rarity, highQuality)
 	if raw then
+		-- The item parser matches English keywords and stat lines. Text copied
+		-- from a Chinese client is Chinese, so map it back first; text that is
+		-- already English (every item POB builds itself) passes through.
+		if POB_I18N then
+			raw = POB_I18N.NormaliseItemText(raw)
+		end
 		self:ParseRaw(sanitiseText(raw), rarity, highQuality)
 	end
 	return self

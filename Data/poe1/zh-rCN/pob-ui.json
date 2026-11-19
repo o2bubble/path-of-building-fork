@@ -1,0 +1,23 @@
+{
+  "version": "1.0.0",
+  "locale": "zh-rCN",
+  "source": "pob",
+  "entries": {
+    "Tip: Right click to edit the runegraft for this node": "提示:右键单击以编辑此节点的符文之结",
+    "Tip: Right click to edit the tattoo for this node": "提示:右键单击以编辑此节点的纹身",
+    "Tip: Press Ctrl+C to copy this node's text.": "提示:按 Ctrl+C 复制此节点的文本",
+    "Tip: Press Ctrl+D": "提示:按 Ctrl+D",
+    "Tip: Press Ctrl+D to enable the display of stat differences.": "提示:按 Ctrl+D 开启属性差异显示",
+    "Tip: Press Ctrl+D to disable the display of stat differences.": "提示:按 Ctrl+D 关闭属性差异显示",
+    "Tip: Hold Shift to display a tooltip for the granted skill": "提示:按住 Shift 显示所授予技能的提示",
+    "Tip: Right click this socket to go to the items page and choose the jewel for this socket.": "提示:右键单击此插槽可前往物品页为此插槽选择珠宝",
+    "Tip: To reach this node by a different path, hold Shift, then trace the path and click this node": "提示:要经由其它路径抵达此天赋点,请按住 Shift 键,然后描画路径并单击此节点",
+    "Tip: You can drag items from the Items tab onto this dropdown to equip them onto the minion.": "提示:你可以从物品页将物品拖到此下拉框,为召唤生物装备",
+    "(Can be allocated without pathing to it)": "(可无需连线直接分配)",
+    "Any Loadout": "任意配置",
+    "Show Node Power": "显示节点强度",
+    "Reset Skills/Points": "重置技能/天赋点",
+    "^7Double-click an item from one of the lists,\nor copy and paste an item from in game\n(hover over the item and Ctrl+C) to view or edit\nthe item and add it to your build. You can\nalso clone an item within Path of Building by\ncopying and pasting it with Ctrl+C and Ctrl+V.\n\nYou can Control + Click an item to equip it, or\ndrag it onto the slot.  This will also add it to\nyour build if it's from the unique/template list.\nIf there's 2 slots an item can go in,\nholding Shift will put it in the second.": "^7双击列表中的物品,\n或在游戏内复制粘贴物品\n(悬停物品并按 Ctrl+C)\n即可查看/编辑该物品并加入构筑。\n也可用 Ctrl+C / Ctrl+V\n在 PoB 内克隆物品。\n\n按住 Control 单击物品可装备,\n或拖到槽位上;来自传奇/模板\n列表的物品还会加入构筑。\n若物品可放入两个槽位,\n按住 Shift 会放入第二个。",
+    "^x7F7F7FThis is a list of items that will be shared between all of\nyour builds.\nYou can add items to this list by dragging them from\none of the other lists.": "^x7F7F7F此列表中的物品会在你的所有构筑之间共享。\n你可以从其它列表中拖动物品加入此列表。"
+  }
+}

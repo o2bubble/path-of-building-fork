@@ -70,7 +70,10 @@ local function matchPlaceholders(key, text)
 		local c, d = key:find("}", b, true)
 		if not c then break end
 		pieces[#pieces + 1] = { literal = key:sub(last, a - 1) }
-		pieces[#pieces + 1] = { slot = key:sub(b + 1, c - 1) }
+		-- The slot may carry a format spec ("{0:+d}"); the digits are the key,
+		-- the spec only describes how POB already formatted the value, so the
+		-- captured text is substituted verbatim.
+		pieces[#pieces + 1] = { slot = key:sub(b + 1, c - 1):match("^(%d+)") }
 		last = c + 1
 		idx = idx + 1
 	end
@@ -99,7 +102,7 @@ end
 
 -- Substitute a template's placeholders with the captured values.
 local function fillPlaceholders(template, values)
-	return (template:gsub("{(%d+)}", function(slot)
+	return (template:gsub("{(%d+)[^}]*}", function(slot)
 		local v = values[slot]
 		if v == nil then return "{" .. slot .. "}" end
 		return v
@@ -163,13 +166,21 @@ function i18n.Load(dataDir, locale)
 						local lead = k:match("^([^{]*)")
 						if lead and k:find("{", 1, true) then
 							local slots = 0
-							for _ in k:gmatch("{%d+}") do slots = slots + 1 end
-							if slots > 0 and #lead >= 2 then
+							for _ in k:gmatch("{%d+[^}]*}") do slots = slots + 1 end
+							if slots > 0 then
 								local bucket = i18n.templates[slots]
 								if not bucket then bucket = { } i18n.templates[slots] = bucket end
-								local first = lead:sub(1, 2)
-								bucket[first] = bucket[first] or { }
-								t_insert(bucket[first], k)
+								-- A template that opens with a placeholder has no
+								-- literal prefix to index by; key it on the literal
+								-- that follows, which the lookup can derive from the
+								-- number it just consumed ("15 points to node" ->
+								-- "po", same as "{0} points to node").
+								local first = (#lead >= 2 and lead:sub(1, 2))
+									or k:match("^{%d+[^}]*}%s*(..)")
+								if first and #first > 0 then
+									bucket[first] = bucket[first] or { }
+									t_insert(bucket[first], k)
+								end
 							end
 						end
 						total = total + 1
@@ -191,7 +202,10 @@ local function probeExact(text)
 	local d = i18n.entries[text]
 	if d then return d end
 	if text:sub(-1) == ":" then
-		return i18n.entries[text:sub(1, -2)]
+		-- Label drawn with a trailing colon ("Strength:"); the dictionary key
+		-- does not carry it, so restore it on the translation.
+		local bare = i18n.entries[text:sub(1, -2)]
+		return bare and (bare .. ":")
 	end
 	return i18n.entries[text .. ":"]
 end
@@ -211,12 +225,20 @@ function i18n.Translate(text)
 	if text:find("%d") then
 		local slots = select(2, text:gsub("%-?%d+%.?%d*", ""))
 		local bucket = i18n.templates[slots]
-		local keys = bucket and bucket[text:sub(1, 2)]
-		if keys then
-			for _, key in ipairs(keys) do
-				local values = matchPlaceholders(key, text)
-				if values then
-					return fillPlaceholders(i18n.entries[key], values)
+		if bucket then
+			-- Literal-prefix templates ("Grants {0}% ...") and leading-placeholder
+			-- templates ("{0} points to node") live in different buckets.
+			local head = text:sub(1, 2)
+			local afterNumber = text:match("^%-?%d+%.?%d*%s*(..)")
+			for _, which in ipairs(afterNumber and { head, afterNumber } or { head }) do
+				local keys = bucket[which]
+				if keys then
+					for _, key in ipairs(keys) do
+						local values = matchPlaceholders(key, text)
+						if values then
+							return fillPlaceholders(i18n.entries[key], values)
+						end
+					end
 				end
 			end
 		end
@@ -302,13 +324,37 @@ function i18n.InstallSearch()
 		if orig(self, pattern) then return true end
 		if not i18n.loaded or not hasNonAscii(pattern) then return false end
 		-- Callers lowercase the haystack before searching (searchName:lower()),
-		-- but dictionary keys keep their original capitalisation, so try the
-		-- text as given and then a title-cased probe for the shapes POB uses
-		-- ("Abberath's Hooves, Goathide Boots").
+		-- so the lookup goes through the lowercased index rather than the keys.
 		local zh = i18n.lower[self]
 		if not zh then return false end
 		return orig(zh, pattern)
 	end
+end
+
+-- Some searches do not go through matchOrPattern: the calcs tab compares with
+-- find(), and the gem picker builds its own pattern list. They call this so a
+-- Chinese query behaves the same as everywhere else.
+function i18n.SearchMatch(text, query)
+	if not text or not query or query == "" then
+		return false
+	end
+	if text:lower():find(query) then
+		return true
+	end
+	if not i18n.loaded or not hasNonAscii(query) then
+		return false
+	end
+	local zh = i18n.lower[text:lower()]
+	-- Plain find: the query is user input, not a pattern.
+	return zh ~= nil and zh:find(query, 1, true) ~= nil
+end
+
+-- Chinese name for an English one, or nil when the dictionary has no entry.
+function i18n.TranslatedName(name)
+	if not i18n.loaded or not name then
+		return nil
+	end
+	return i18n.lower[name:lower()]
 end
 
 -- ==== engine hooks =========================================================

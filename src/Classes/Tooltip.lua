@@ -156,7 +156,14 @@ function TooltipClass:AddLine(size, text, font, modLine, background)
 			fontToUse = "VAR"
 		end
 		for line in s_gmatch(text .. "\n", "([^\n]*)\n") do
-			if line:match("^.*(Equipping)") == "Equipping" or line:match("^.*(Removing)") == "Removing" then
+			local isTransition = line:match("^.*(Equipping)") == "Equipping" or line:match("^.*(Removing)") == "Removing"
+			-- Translate before wrapping: WrapString breaks on whitespace, and a
+			-- wrapped English fragment is no longer a dictionary key, so a line
+			-- translated only at draw time would stay English.
+			if POB_I18N then
+				line = POB_I18N.TranslateColoured(line)
+			end
+			if isTransition then
 				t_insert(self.blocks, { height = size + 2})
 			else
 				self.blocks[#self.blocks].height = self.blocks[#self.blocks].height + size + 2

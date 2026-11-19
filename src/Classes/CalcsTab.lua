@@ -434,7 +434,13 @@ end
 
 function CalcsTabClass:SearchMatch(txt)
 	local searchStr = self.controls.search.buf:lower()
-	return string.len(searchStr) > 0 and txt:lower():find(searchStr)
+	if string.len(searchStr) == 0 then
+		return false
+	end
+	if POB_I18N then
+		return POB_I18N.SearchMatch(txt, searchStr)
+	end
+	return txt:lower():find(searchStr) ~= nil
 end
 
 -- Build the calculation output tables

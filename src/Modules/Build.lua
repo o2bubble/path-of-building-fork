@@ -2142,7 +2142,10 @@ function buildMode:CompareStatList(tooltip, statList, actor, baseOutput, compare
 
 				valStr = formatNumSep(valStr)
 
-				local line = s_format("%s%s %s", color, valStr, statData.label)
+				-- The line is value + label, so the whole string is not a key;
+				-- translate the label before composing.
+				local label = POB_I18N and POB_I18N.Translate(statData.label) or statData.label
+				local line = s_format("%s%s %s", color, valStr, label)
 				local pcPerPt = ""
 				if statData.compPercent and statVal1 ~= 0 and statVal2 ~= 0 then
 					local pc = statVal1 / statVal2 * 100 - 100
@@ -2152,7 +2155,8 @@ function buildMode:CompareStatList(tooltip, statList, actor, baseOutput, compare
 					end
 				end
 				if nodeCount then
-					line = line .. s_format(" ^8[%+"..statData.fmt.."%s per point]", diff * ((statData.pc or statData.mod) and 100 or 1) / nodeCount, pcPerPt)
+					local perPoint = POB_I18N and POB_I18N.Translate("per point") or "per point"
+					line = line .. s_format(" ^8[%+"..statData.fmt.."%s "..perPoint.."]", diff * ((statData.pc or statData.mod) and 100 or 1) / nodeCount, pcPerPt)
 				end
 				tooltip:AddLine(14, line)
 				count = count + 1

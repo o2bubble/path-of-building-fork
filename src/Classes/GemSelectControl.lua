@@ -192,7 +192,10 @@ function GemSelectClass:BuildList(buf)
 		for i, pattern in ipairs(patternList) do
 			local matchList = { }
 			for gemId, gemData in pairs(self.gems) do
-				if self:FilterSupport(gemId, gemData) and not added[gemId] and ((" "..gemData.name:lower()):match(pattern)) then
+				local zhName = POB_I18N and POB_I18N.TranslatedName(gemData.name)
+				local hit = (" "..gemData.name:lower()):match(pattern)
+					or (zhName ~= nil and zhName:find(lowerSearch, 1, true) ~= nil)
+				if self:FilterSupport(gemId, gemData) and not added[gemId] and hit then
 					addThisGem = true
 					if #tagsList > 0 then
 						for _, tag in ipairs(tagsList) do
@@ -398,11 +401,16 @@ end
 
 function GemSelectClass:SyncSelection()
 	self.selIndex = 0
+	local buf = self.buf:lower()
 	for index, gemId in ipairs(self.list) do
-		if self.gems[gemId] and self.gems[gemId].name:lower() == self.buf:lower() then
-			self.selIndex = index
-			self:ScrollSelIntoView()
-			break
+		local gemData = self.gems[gemId]
+		if gemData then
+			local zhName = POB_I18N and POB_I18N.TranslatedName(gemData.name)
+			if gemData.name:lower() == buf or (zhName and zhName:lower() == buf) then
+				self.selIndex = index
+				self:ScrollSelIntoView()
+				break
+			end
 		end
 	end
 end
@@ -457,7 +465,11 @@ function GemSelectClass:UpdateGem(setText, addUndo, focusLost)
 	local gemId = self.list[m_max(self.selIndex, 1)]
 	-- don't process unless the buffer equals an actual gem, whether typed, clicked, or navigated with arrows
 	-- we don't nil the gemId here if it doesn't match because the imbuedGemSelect and slotGemSelect have different paths
-	local bufMatchesGem = (self.gems[gemId] and self.buf:lower() == self.gems[gemId].name:lower())
+	local zhBufMatch = self.gems[gemId]
+		and POB_I18N
+		and POB_I18N.TranslatedName(self.gems[gemId].name)
+	local bufMatchesGem = (self.gems[gemId] and (self.buf:lower() == self.gems[gemId].name:lower()
+		or (zhBufMatch ~= nil and zhBufMatch:lower() == self.buf:lower())))
 
 	if self.buf:match("%S") and self.gems[gemId] then
 		self.gemId = gemId

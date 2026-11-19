@@ -1811,6 +1811,41 @@ end
 
 do
 	local wrapTable = { }
+
+	-- Byte length of the UTF-8 character starting at pos.
+	local function charSize(str, pos)
+		local b = str:byte(pos)
+		if not b or b < 0xC0 then
+			return 1
+		elseif b < 0xE0 then
+			return 2
+		elseif b < 0xF0 then
+			return 3
+		end
+		return 4
+	end
+
+	-- Chinese has no spaces, so the word-based pass below would emit one
+	-- overlong line. Break between characters instead, and emit a single
+	-- character even when it is wider than the column so this cannot spin.
+	local function pushCharWrapped(str, height, width)
+		local start, n = 1, #str
+		while start <= n do
+			local pos, lastFit = start, nil
+			while pos <= n do
+				local nextPos = pos + charSize(str, pos)
+				if DrawStringWidth(height, "VAR", str:sub(start, nextPos - 1)) > width then
+					break
+				end
+				lastFit = nextPos
+				pos = nextPos
+			end
+			lastFit = lastFit or start + charSize(str, start)
+			t_insert(wrapTable, str:sub(start, lastFit - 1))
+			start = lastFit
+		end
+	end
+
 	function main:WrapString(str, height, width)
 		wipeTable(wrapTable)
 		local lineStart = 1
@@ -1822,7 +1857,12 @@ do
 				e = #str + 1
 			end
 			if s > #str then
-				t_insert(wrapTable, str:sub(lineStart, -1))
+				local rest = str:sub(lineStart, -1)
+				if #rest > 0 and DrawStringWidth(height, "VAR", rest) > width then
+					pushCharWrapped(rest, height, width)
+				else
+					t_insert(wrapTable, rest)
+				end
 				break
 			end
 			lastBreak = s - 1

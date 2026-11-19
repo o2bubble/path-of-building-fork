@@ -331,6 +331,52 @@ local function isValidUTF8(text)
 	return true
 end
 
+-- Replace only the bytes that do not form valid UTF-8. The font layer draws
+-- multi-byte characters through the FreeType fallback, so a blanket
+-- "[\128-\255] -> ?" would destroy every CJK character that reaches a text
+-- field. Broken bytes still need a placeholder; well-formed sequences pass.
+function sanitiseInvalidUTF8(text)
+	if not text:find("[\128-\255]") then
+		return text
+	end
+	local out = { }
+	local i, n = 1, #text
+	while i <= n do
+		local b = text:byte(i)
+		if b < 0x80 then
+			out[#out + 1] = text:sub(i, i)
+			i = i + 1
+		else
+			local extra
+			if b >= 0xC2 and b <= 0xDF then
+				extra = 1
+			elseif b >= 0xE0 and b <= 0xEF then
+				extra = 2
+			elseif b >= 0xF0 and b <= 0xF4 then
+				extra = 3
+			end
+			local ok = extra ~= nil
+			if ok then
+				for k = 1, extra do
+					local c = text:byte(i + k)
+					if not c or c < 0x80 or c > 0xBF then
+						ok = false
+						break
+					end
+				end
+			end
+			if ok then
+				out[#out + 1] = text:sub(i, i + extra)
+				i = i + extra + 1
+			else
+				out[#out + 1] = "?"
+				i = i + 1
+			end
+		end
+	end
+	return table.concat(out)
+end
+
 ---@param text string
 ---@return string
 function sanitiseText(text)

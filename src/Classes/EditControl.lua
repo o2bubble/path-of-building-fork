@@ -566,7 +566,10 @@ function EditClass:OnKeyDown(key, doubleClick)
 			if self.pasteFilter then
 				text = self.pasteFilter(text)
 			end
-			text = text:gsub("[\128-\255]","?")
+			-- Only genuinely malformed bytes become "?"; the FreeType fallback
+			-- draws multi-byte characters, so replacing every high byte here
+			-- turned any pasted Chinese into a row of question marks.
+			text = sanitiseInvalidUTF8(text)
 			if self.sel and self.sel ~= self.caret then
 				self:ReplaceSel(text)
 			else

@@ -18,6 +18,29 @@
     "Show Node Power": "显示节点强度",
     "Reset Skills/Points": "重置技能/天赋点",
     "^7Double-click an item from one of the lists,\nor copy and paste an item from in game\n(hover over the item and Ctrl+C) to view or edit\nthe item and add it to your build. You can\nalso clone an item within Path of Building by\ncopying and pasting it with Ctrl+C and Ctrl+V.\n\nYou can Control + Click an item to equip it, or\ndrag it onto the slot.  This will also add it to\nyour build if it's from the unique/template list.\nIf there's 2 slots an item can go in,\nholding Shift will put it in the second.": "^7双击列表中的物品,\n或在游戏内复制粘贴物品\n(悬停物品并按 Ctrl+C)\n即可查看/编辑该物品并加入构筑。\n也可用 Ctrl+C / Ctrl+V\n在 PoB 内克隆物品。\n\n按住 Control 单击物品可装备,\n或拖到槽位上;来自传奇/模板\n列表的物品还会加入构筑。\n若物品可放入两个槽位,\n按住 Shift 会放入第二个。",
-    "^x7F7F7FThis is a list of items that will be shared between all of\nyour builds.\nYou can add items to this list by dragging them from\none of the other lists.": "^x7F7F7F此列表中的物品会在你的所有构筑之间共享。\n你可以从其它列表中拖动物品加入此列表。"
+    "^x7F7F7FThis is a list of items that will be shared between all of\nyour builds.\nYou can add items to this list by dragging them from\none of the other lists.": "^x7F7F7F此列表中的物品会在你的所有构筑之间共享。\n你可以从其它列表中拖动物品加入此列表。",
+
+    "Character import status": "角色导入状态",
+    "Not authenticated": "未授权",
+    "^7Authorize with Path of Exile": "^7使用 Path of Exile 授权",
+    "^7Logout from Path of Exile API": "^7登出 Path of Exile API",
+    "^7To start importing a character, enter the character's account name:": "^7要开始导入角色,请输入该角色的账号名:",
+    "^7Choose character to import data from:": "^7选择要导入其数据的角色:",
+    "^7Note: if the account name contains non-ASCII characters it must be pasted into the textbox,\nnot typed manually.": "^7注意:若账号名含非 ASCII 字符,必须粘贴到输入框,\n不能手动键入。",
+    "^1Missing discriminator e.g. #1234": "^1缺少判别符,例如 #1234",
+    "Import From Your Account": "从你的账号导入",
+    "Import By Account Name": "按账号名导入",
+    "Build Sharing": "构筑分享",
+    "^7Generate a code to share this build with other Path of Building users:": "^7生成代码,将此构筑分享给其他 Path of Building 用户:",
+    "Generate": "生成",
+    "Export Support": "导出辅助",
+    "This is for party play, to export support character, it enables the exporting of auras, curses and modifiers to the enemy": "用于组队游戏。导出辅助角色时会一并导出光环、诅咒以及对敌人的加成",
+    "Code": "代码",
+    "Copy": "复制",
+    "Share": "分享",
+    "Creating link...": "正在生成链接...",
+    "^7Note: this code can be very long; you can use 'Share' to shrink it.": "^7注意:此代码可能很长;可使用「分享」来缩短它。",
+    "^7To import a build, enter URL or code here:": "^7要导入构筑,请在此输入 URL 或代码:",
+    "Import": "导入"
   }
 }

@@ -254,9 +254,12 @@ function i18n.Translate(text)
 			local head = probeExact(text:sub(1, p - 1))
 			if head then return head .. text:sub(p) end
 		end
-		local q = text:find(": ", 1, true)
+		-- "Label: value" -- the colon may carry a space after it or not, and the
+		-- label may carry one before it or not. Translate the label and keep
+		-- the separator and value as drawn.
+		local q = text:find(":", 1, true)
 		if q and q > 1 then
-			local head = probeExact(text:sub(1, q - 1))
+			local head = probeExact(text:sub(1, q - 1)) or probeExact(text:sub(1, q - 2))
 			if head then return head .. text:sub(q) end
 		end
 	end

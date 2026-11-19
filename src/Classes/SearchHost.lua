@@ -114,7 +114,9 @@ function SearchHostClass:OnSearchKeyDown(key)
 		self:ResetSearch()
 		return self
 	elseif self:IsSearchActive() and key == "BACK" then
-		self.searchTerm = self.searchTerm:sub(1, -2)
+		-- Drop a whole UTF-8 character, not one byte: cutting a 3-byte CJK
+		-- character in half leaves two orphaned continuation bytes behind.
+		self.searchTerm = self.searchTerm:gsub("[%z\1-\127\194-\244][\128-\191]*$", "")
 		self:UpdateSearch()
 		return self
 	end

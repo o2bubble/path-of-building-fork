@@ -9,6 +9,36 @@ local m_floor = math.floor
 local protected_replace = "*"
 local utf8 = require('lua-utf8')
 
+-- The caret is a byte index into a UTF-8 buffer. Stepping it by one byte lands
+-- inside a multi-byte character: backspace leaves the trailing continuation
+-- bytes behind (drawn as garbage) and the caret renders mid-glyph. These snap
+-- a byte position outward to a character edge.
+local function charStartAtOrBefore(buf, pos)
+	while pos > 1 do
+		local b = buf:byte(pos)
+		if not b or b < 0x80 or b >= 0xC0 then
+			break
+		end
+		pos = pos - 1
+	end
+	return pos
+end
+
+local function charEndAfter(buf, pos)
+	local n = #buf
+	local b = buf:byte(pos)
+	if not b then
+		return n + 1
+	elseif b < 0x80 then
+		return pos + 1
+	elseif b < 0xE0 then
+		return m_min(pos + 2, n + 1)
+	elseif b < 0xF0 then
+		return m_min(pos + 3, n + 1)
+	end
+	return m_min(pos + 4, n + 1)
+end
+
 local function lastLine(str)
 	local lastLineIndex = 1
 	while true do
@@ -613,17 +643,37 @@ function EditClass:OnKeyDown(key, doubleClick)
 		if self.sel and self.sel ~= self.caret then
 			self:ReplaceSel("")
 		elseif self.caret > 1 then
-			local len = 1
+			-- Delete whole characters, not bytes: a CJK character is 3 bytes and
+			-- removing one of them leaves two orphaned continuation bytes.
+			local start = charStartAtOrBefore(self.buf, self.caret - 1)
 			if IsKeyDown("CTRL") then
-				while self.caret - len > 1 and self.buf:sub(self.caret - len, self.caret - len):match("%s") and not self.buf:sub(self.caret - len - 1, self.caret - len - 1):match("\n") do
-					len = len + 1
+				-- Word delete steps character by character too. %w never matches a
+				-- CJK byte, so a Chinese run falls through and one character is
+				-- removed, which is the sensible result.
+				while start > 1 do
+					local prev = charStartAtOrBefore(self.buf, start - 1)
+					local ch = self.buf:sub(prev, start - 1)
+					if ch ~= "\n" and ch:match("^%s$") then
+						start = prev
+					else
+						break
+					end
 				end
-				if self.buf:sub(self.caret - len, self.caret - len):match("%w") then
-					while self.caret - len > 1 and self.buf:sub(self.caret - len - 1, self.caret - len - 1):match("%w") do
-						len = len + 1
+				if start > 1 then
+					local prev = charStartAtOrBefore(self.buf, start - 1)
+					if self.buf:sub(prev, start - 1):match("^%w+$") then
+						while start > 1 do
+							prev = charStartAtOrBefore(self.buf, start - 1)
+							if self.buf:sub(prev, start - 1):match("^%w+$") then
+								start = prev
+							else
+								break
+							end
+						end
 					end
 				end
 			end
+			local len = self.caret - start
 			self.buf = self.buf:sub(1, self.caret - 1 - len) .. self.buf:sub(self.caret)
 			self.caret = self.caret - len
 			self.sel = nil
@@ -638,18 +688,33 @@ function EditClass:OnKeyDown(key, doubleClick)
 		if self.sel and self.sel ~= self.caret then
 			self:ReplaceSel("")
 		elseif self.caret <= #self.buf then
-			local len = 1
+			-- Mirror of BACK: advance to a character edge before cutting.
+			local stop = charEndAfter(self.buf, self.caret)
 			if IsKeyDown("CTRL") then
-				while self.caret + len <= #self.buf and self.buf:sub(self.caret + len - 1, self.caret + len - 1):match("%s") and not self.buf:sub(self.caret + len, self.caret + len):match("\n") do
-					len = len + 1
+				while stop <= #self.buf do
+					local nxt = charEndAfter(self.buf, stop)
+					local ch = self.buf:sub(stop, nxt - 1)
+					if ch ~= "\n" and ch:match("^%s$") then
+						stop = nxt
+					else
+						break
+					end
 				end
-				if self.buf:sub(self.caret + len - 1, self.caret + len - 1):match("%w") then
-					while self.caret + len <= #self.buf and self.buf:sub(self.caret + len, self.caret + len):match("%w") do
-						len = len + 1
+				if stop <= #self.buf then
+					local nxt = charEndAfter(self.buf, stop)
+					if self.buf:sub(stop, nxt - 1):match("^%w+$") then
+						while stop <= #self.buf do
+							nxt = charEndAfter(self.buf, stop)
+							if self.buf:sub(stop, nxt - 1):match("^%w+$") then
+								stop = nxt
+							else
+								break
+							end
+						end
 					end
 				end
 			end
-			self.buf = self.buf:sub(1, self.caret - 1) .. self.buf:sub(self.caret + len)
+			self.buf = self.buf:sub(1, self.caret - 1) .. self.buf:sub(stop)
 			self.sel = nil
 			self.blinkStart = GetTime()
 			if self.changeFunc then

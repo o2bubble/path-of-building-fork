@@ -158,8 +158,19 @@ function i18n.Load(dataDir, locale)
 						-- Entries are stored JSON-escaped ("\\n"), and so is the
 						-- string POB draws at runtime, so no unescaping is done.
 						i18n.entries[k] = v
+						-- Lua long-bracket literals ([=[...]=]) drop the newline
+						-- after the opener but keep the one before the closer, so
+						-- a key copied from source often carries padding the drawn
+						-- string does not, or lacks padding it has. Register the
+						-- trimmed form too; an exact key still wins.
+						local trimmed = k:gsub("^[\r\n]+", ""):gsub("[\r\n]+$", "")
+						if trimmed ~= k and i18n.entries[trimmed] == nil then
+							i18n.entries[trimmed] = v
+						end
 						local low = k:lower()
 						if i18n.lower[low] == nil then i18n.lower[low] = v end
+						local lowTrimmed = trimmed:lower()
+						if i18n.lower[lowTrimmed] == nil then i18n.lower[lowTrimmed] = v end
 						-- Index templates by (slot count, leading literal) so a
 						-- lookup narrows to a handful of candidates instead of
 						-- scanning tens of thousands of keys per drawn string.
@@ -201,6 +212,13 @@ end
 local function probeExact(text)
 	local d = i18n.entries[text]
 	if d then return d end
+	-- Multiline labels are drawn with whatever padding the literal carried.
+	-- Retry without it before giving up on the entry.
+	local trimmed = text:gsub("^[\r\n]+", ""):gsub("[\r\n]+$", "")
+	if trimmed ~= text then
+		d = i18n.entries[trimmed]
+		if d then return d end
+	end
 	if text:sub(-1) == ":" then
 		-- Label drawn with a trailing colon ("Strength:"); the dictionary key
 		-- does not carry it, so restore it on the translation.
@@ -269,7 +287,7 @@ end
 -- Translate a string that may carry colour escapes, keeping the escapes.
 function i18n.TranslateColoured(text)
 	if not i18n.loaded or type(text) ~= "string" then return text end
-	local direct = i18n.entries[text]
+	local direct = probeExact(text)
 	if direct then return direct end
 	-- Fast path: most drawn strings are short labels with no escapes and no
 	-- dictionary entry. Returning here keeps the per-frame cost to one table

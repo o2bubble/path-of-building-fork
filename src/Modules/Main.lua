@@ -127,6 +127,10 @@ function main:Init()
 	-- Which dictionary the UI draws with. Launch already picked one from the
 	-- manifest; LoadSettings may override it with the saved preference.
 	self.language = POB_I18N and POB_I18N.lang or "en"
+	-- Where translation updates come from. The default is the upstream
+	-- dictionary repository; pointing it elsewhere is all a mirror needs.
+	self.i18nRepo = "https://github.com/o2bubble/path-of-building-i18n"
+	self.i18nAutoUpdate = true
 	
 	if not SetDPIScaleOverridePercent then SetDPIScaleOverridePercent = function(scale) end end
 
@@ -156,6 +160,19 @@ function main:Init()
 
 	if self.userPath then
 		self:ChangeUserPath(self.userPath, ignoreBuild)
+	end
+
+	-- Pull dictionary updates in the background once the window is up. Only
+	-- downloads files whose SHA1 differs, so an up-to-date client transfers
+	-- nothing beyond the manifest.
+	if self.i18nAutoUpdate and POB_I18N and POB_I18N.repoUrl then
+		POB_I18N.CheckForUpdates(nil, function(result)
+			if result.updated then
+				ConPrintf("[i18n] updated %d file(s)", result.downloaded)
+			elseif result.error then
+				ConPrintf("[i18n] update check failed: %s", result.error)
+			end
+		end)
 	end
 
 	---@type ItemDBData
@@ -699,6 +716,15 @@ function main:LoadSettings(ignoreBuild)
 					self.language = node.attrib.language
 					POB_I18N.SetLocale(self.language)
 				end
+				if node.attrib.i18nRepo then
+					self.i18nRepo = node.attrib.i18nRepo
+				end
+				if node.attrib.i18nAutoUpdate then
+					self.i18nAutoUpdate = node.attrib.i18nAutoUpdate == "true"
+				end
+				if POB_I18N then
+					POB_I18N.repoUrl = self.i18nRepo
+				end
 			end
 		end
 	end
@@ -833,6 +859,8 @@ function main:SaveSettings()
 		disableScrollControlInteraction = tostring(self.disableScrollControlInteraction),
 		dpiScaleOverridePercent = tostring(self.dpiScaleOverridePercent),
 		language = self.language,
+		i18nRepo = self.i18nRepo,
+		i18nAutoUpdate = tostring(self.i18nAutoUpdate),
 	} })
 	local res, errMsg = common.xml.SaveXMLFile(setXML, self.userPath.."Settings.xml")
 	if not res then
@@ -919,7 +947,9 @@ function main:OpenOptionsPopup(savedState)
 		showAllItemAffixes = self.showAllItemAffixes,
 		disableScrollControlInteraction = self.disableScrollControlInteraction,
 		dpiScaleOverridePercent = self.dpiScaleOverridePercent,
-		language = self.language
+		language = self.language,
+		i18nRepo = self.i18nRepo,
+		i18nAutoUpdate = self.i18nAutoUpdate
 	}
 
 	-- NOTE: Height needs to be adjusted if more menu options are added
@@ -977,6 +1007,48 @@ function main:OpenOptionsPopup(savedState)
 		controls.languageLabel = new("LabelControl"):LabelControl({ "RIGHT", controls.language, "LEFT" }, { defaultLabelSpacingPx, 0, 0, 16 }, "^7Language:")
 		controls.language.tooltipText = "Language used for item names, stats and interface text.\nDefault draws the original English."
 		controls.language:SelByValue(self.language, "id")
+		nextRow()
+
+		-- Dictionary updates. The repository is a plain set of JSON files plus
+		-- a manifest with a SHA1 per file, so any static host works; a GitHub
+		-- repo page URL is translated to its raw-content form.
+		self.i18nStatus = self.i18nStatus or ""
+		controls.i18nRepo = new("EditControl"):EditControl({ "TOPLEFT", controls.sectionAnchor, "TOPLEFT" }, { currentX + defaultLabelPlacementX, currentY, 290, 18 })
+		controls.i18nRepo:SetText(self.i18nRepo or "")
+		controls.i18nRepoLabel = new("LabelControl"):LabelControl({ "RIGHT", controls.i18nRepo, "LEFT" }, { defaultLabelSpacingPx, 0, 0, 16 }, "^7Translation repository:")
+		controls.i18nRepo.tooltipText = "Base URL of a translation repository.\nA GitHub repo page or a raw-content base both work."
+		nextRow()
+		controls.i18nCheck = new("ButtonControl"):ButtonControl({ "TOPLEFT", controls.sectionAnchor, "TOPLEFT" }, { currentX + defaultLabelPlacementX, currentY, 110, 18 }, "Check now", function()
+			self.i18nRepo = controls.i18nRepo.buf
+			POB_I18N.repoUrl = self.i18nRepo
+			self.i18nCheckRunning = true
+			POB_I18N.CheckForUpdates(function(status)
+				self.i18nStatus = status
+			end, function(result)
+				self.i18nCheckRunning = false
+				if result.error then
+					self.i18nStatus = "^1" .. result.error
+				elseif result.updated then
+					self.i18nStatus = "^2" .. POB_I18N.Fill("Updated {0} of {1} file(s).", result.downloaded, result.total)
+				else
+					self.i18nStatus = "^2Already up to date."
+				end
+			end)
+		end)
+		controls.i18nCheck.enabled = function()
+			return not self.i18nCheckRunning
+		end
+		-- CheckBoxControl derives both the box edge and the label font size from
+		-- its width; anchor it beside the button so it can't overlap it.
+		controls.i18nAutoUpdate = new("CheckBoxControl"):CheckBoxControl({ "LEFT", controls.i18nCheck, "RIGHT" }, { 12, 0, 20 }, "^7Check on startup", function(state)
+			self.i18nAutoUpdate = state
+		end)
+		controls.i18nAutoUpdate.labelRight = true
+		controls.i18nAutoUpdate.state = self.i18nAutoUpdate
+		nextRow()
+		controls.i18nStatusLabel = new("LabelControl"):LabelControl({ "TOPLEFT", controls.sectionAnchor, "TOPLEFT" }, { currentX + defaultLabelPlacementX, currentY, 0, 16 }, function()
+			return self.i18nStatus or ""
+		end)
 		nextRow()
 	end
 
@@ -1304,6 +1376,13 @@ function main:OpenOptionsPopup(savedState)
 		if savedState.language and savedState.language ~= self.language then
 			self.language = savedState.language
 			POB_I18N.SetLocale(self.language)
+		end
+		if savedState.i18nRepo then
+			self.i18nRepo = savedState.i18nRepo
+			POB_I18N.repoUrl = self.i18nRepo
+		end
+		if savedState.i18nAutoUpdate ~= nil then
+			self.i18nAutoUpdate = savedState.i18nAutoUpdate
 		end
 		main:ClosePopup()
 	end)

@@ -429,6 +429,183 @@ function i18n.SetLocale(locale)
 	i18n.Load(i18n.baseDir, locale)
 end
 
+-- ==== remote updates ========================================================
+--
+-- The dictionaries live in their own repository. A configured base URL is read
+-- as: <base>/manifest.json plus <base>/<locale>/<file>. Each file in the
+-- manifest carries a SHA1, so an update downloads only what changed — the game
+-- data dictionaries are 12 MB and most releases touch one or two files.
+
+-- Accept the URL people actually have in their clipboard (the repo page) as
+-- well as a raw content base. Anything else is used verbatim, so a self-hosted
+-- mirror works with no special casing.
+function i18n.NormaliseRepoUrl(url)
+	url = (url or ""):gsub("%s+$", ""):gsub("/+$", "")
+	if url == "" then return nil end
+	local owner, repo = url:match("^https?://github%.com/([^/]+)/([^/#?]+)")
+	if owner then
+		repo = repo:gsub("%.git$", "")
+		return "https://raw.githubusercontent.com/" .. owner .. "/" .. repo .. "/HEAD"
+	end
+	return url
+end
+
+local function sha1Of(path)
+	local f = io.open(path, "rb")
+	if not f then return nil end
+	local data = f:read("*a")
+	f:close()
+	return require("sha1")(data)
+end
+
+-- Fill "{0}"-style slots at runtime. This is the same convention the
+-- dictionary uses for its template keys, so the produced string and the key
+-- line up; string.format is not usable here because it speaks "%s".
+function i18n.Fill(template, ...)
+	local args = { ... }
+	return (template:gsub("{(%d+)}", function(slot)
+		return tostring(args[tonumber(slot) + 1])
+	end))
+end
+
+local function writeFileAtomic(path, data)
+	local tmp = path .. ".tmp"
+	local f = io.open(tmp, "wb")
+	if not f then return nil, "cannot write " .. tmp end
+	f:write(data)
+	f:close()
+	-- On Windows, rename does not replace an existing file, which is exactly
+	-- the case that matters here: every update overwrites a file that is
+	-- already installed.
+	local ok, err = os.rename(tmp, path)
+	if not ok then
+		os.remove(path)
+		ok, err = os.rename(tmp, path)
+	end
+	if not ok then
+		os.remove(tmp)
+		return nil, err or ("cannot replace " .. path)
+	end
+	return true
+end
+
+-- Locales that a sync should bring up to date: the ones already installed, or
+-- — on a fresh install — the repository's default, so pointing a bare client at
+-- the repo is enough to get it working.
+local function syncTargets(remote)
+	local targets = { }
+	local present = { }
+	for _, locale in ipairs(remote.locales or { }) do
+		if type(locale) == "table" and type(locale.id) == "string"
+			and fileExists(i18n.baseDir .. "/" .. locale.id .. "/meta.json") then
+			present[locale.id] = true
+			t_insert(targets, locale)
+		end
+	end
+	if #targets == 0 then
+		local wanted = remote.defaultLocale
+		for _, locale in ipairs(remote.locales or { }) do
+			if type(locale) == "table" and locale.id == wanted and type(locale.files) == "table" then
+				t_insert(targets, locale)
+				break
+			end
+		end
+	end
+	return targets
+end
+
+-- Fetch the manifest, then each file whose SHA1 differs. `onDone` is called
+-- once with { updated = <bool>, downloaded = <n>, total = <n>, error = <str|nil>,
+-- progress = <str> }. Progress updates arrive through onProgress when given.
+function i18n.CheckForUpdates(onProgress, onDone)
+	onDone = onDone or function() end
+	onProgress = onProgress or function() end
+	local base = i18n.NormaliseRepoUrl(i18n.repoUrl)
+	if not base then
+		onDone({ error = "No translation repository is configured." })
+		return
+	end
+	if not i18n.baseDir then
+		onDone({ error = "No i18n directory is installed next to the application." })
+		return
+	end
+	local function fail(msg)
+		onDone({ error = msg })
+	end
+	onProgress("Checking for updates...")
+	launch:DownloadPage(base .. "/manifest.json", function(response, errMsg)
+		if errMsg then
+			fail(i18n.Fill("Could not reach the repository ({0})", errMsg))
+			return
+		end
+		local dkjson = require("dkjson")
+		local ok, remote = pcall(dkjson.decode, response.body, 1, nil)
+		if not ok or type(remote) ~= "table" or type(remote.locales) ~= "table" then
+			fail("The repository manifest is not valid JSON.")
+			return
+		end
+		local queue = { }
+		local unchanged = 0
+		for _, locale in ipairs(syncTargets(remote)) do
+			if type(locale.files) == "table" then
+				for name, sha in pairs(locale.files) do
+					if type(name) == "string" and type(sha) == "string" and not name:find("[/\\]") then
+						local path = i18n.baseDir .. "/" .. locale.id .. "/" .. name
+						if sha1Of(path) ~= sha then
+							t_insert(queue, { locale = locale.id, name = name, sha = sha, path = path })
+						else
+							unchanged = unchanged + 1
+						end
+					end
+				end
+			end
+		end
+		if #queue == 0 then
+			onDone({ updated = false, unchanged = unchanged, total = unchanged })
+			return
+		end
+
+		-- One file at a time: the download helper runs each request in its own
+		-- subscript, and firing dozens at once would spawn that many Lua states.
+		local index = 0
+		local downloaded = 0
+		local function nextFile()
+			index = index + 1
+			local item = queue[index]
+			if not item then
+				-- Record what is now installed so the locale list and the next
+				-- diff both agree with the files on disk.
+				local f = io.open(i18n.baseDir .. "/manifest.json", "wb")
+				if f then
+					f:write(response.body)
+					f:close()
+				end
+				local current = i18n.lang
+				i18n.Load(i18n.baseDir, current)
+				onProgress("")
+				onDone({ updated = true, downloaded = downloaded, total = #queue + unchanged })
+				return
+			end
+			onProgress(i18n.Fill("Downloading {0} ({1}/{2})...", item.name, index, #queue))
+			MakeDir(i18n.baseDir .. "/" .. item.locale)
+			launch:DownloadPage(base .. "/" .. item.locale .. "/" .. item.name, function(fileResponse, fileErr)
+				if fileErr then
+					fail(i18n.Fill("Could not download {0} ({1})", item.name, fileErr))
+					return
+				end
+				local written, writeErr = writeFileAtomic(item.path, fileResponse.body)
+				if not written then
+					fail(i18n.Fill("Could not save {0} ({1})", item.name, writeErr))
+					return
+				end
+				downloaded = downloaded + 1
+				nextFile()
+			end)
+		end
+		nextFile()
+	end)
+end
+
 function i18n.Load(dataDir, locale)
 	i18n.baseDir = dataDir
 	i18n.entries = { }

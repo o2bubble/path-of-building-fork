@@ -85,26 +85,35 @@ local function compileKey(key)
 	end
 	pieces[#pieces + 1] = { literal = key:sub(last) }
 
-	local pattern = "^"
+	local pattern, lowerPattern = "^", "^"
 	local slots = { }
 	for _, p in ipairs(pieces) do
 		if p.literal then
 			pattern = pattern .. (p.literal:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0"))
+			lowerPattern = lowerPattern
+				.. (p.literal:lower():gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0"))
 		else
 			pattern = pattern .. "(.-)"
+			lowerPattern = lowerPattern .. "(.-)"
 			slots[#slots + 1] = p.slot
 		end
 	end
-	return { pattern = pattern .. "$", slots = slots }
+	return { pattern = pattern .. "$", lowerPattern = lowerPattern .. "$", slots = slots }
 end
 
-local function matchPlaceholders(key, text)
+-- `lowered` is the same text lowercased, passed only when the drawn line is
+-- in capitals ("(6-10)% CHANCE TO IGNITE") so the key's own casing cannot be
+-- matched literally.
+local function matchPlaceholders(key, text, lowered)
 	local c = compiledPatterns[key]
 	if not c then
 		c = compileKey(key)
 		compiledPatterns[key] = c
 	end
 	local pattern, slots = c.pattern, c.slots
+	if lowered then
+		pattern, text = c.lowerPattern, lowered
+	end
 
 	local caps = { text:match(pattern) }
 	-- A failed match yields no captures, which is indistinguishable from a
@@ -800,6 +809,14 @@ local function probeExact(text)
 			if plus then return lead .. plus end
 		end
 	end
+	-- Some item mods are drawn in capitals ("BURNING HOOFPRINTS") while the
+	-- dictionary keys the sentence form the game data uses.
+	-- probe, not text:upper() == text: a miss runs for most drawn strings and
+	-- should not build a new string every time.
+	if i18n.lower and not text:find("%l") and text:find("%a") then
+		local upper = i18n.lower[text:lower()]
+		if upper then return upper end
+	end
 	-- Multiline labels are drawn with whatever padding the literal carried.
 	-- Retry without it before giving up on the entry.
 	local trimmed = text:gsub("^[\r\n]+", ""):gsub("[\r\n]+$", "")
@@ -824,6 +841,34 @@ function i18n.Translate(text)
 	local direct = probeExact(text)
 	if direct then return direct end
 
+	-- Item text spells a roll range out ("+(20-30) to Strength") where the
+	-- dictionary keys the rolled form ("+20 to Strength"). Retry with the
+	-- lower bound filled in, both as drawn and with the sign the game adds
+	-- once the roll is real. The recursive call cannot loop: the result has
+	-- no "(", so this branch is not taken again.
+	if text:find("%(%d") or text:find("%(%-") then
+		local flat = text:gsub("%((%-?%d+%.?%d*)%-%-?%d+%.?%d*%)", "%1")
+		if flat ~= text then
+			-- Only a bare quantity takes the sign: "(20-30) to Strength" draws
+			-- as "+25 to Strength" once rolled, "(6-10)% chance to Ignite"
+			-- draws as "8% chance to Ignite".
+			local signed = (flat:match("^%d") and not text:find("%)%%", 1))
+				and ("+" .. flat) or nil
+			-- Exact hits first, and the signed spelling first of those: the
+			-- dictionary keys "+20 to Strength", while a template would drop
+			-- the sign the game draws.
+			for _, candidate in ipairs(signed and { signed, flat } or { flat }) do
+				local hit = i18n.entries[candidate]
+					or (i18n.lower and i18n.lower[candidate:lower()])
+				if hit then return hit end
+			end
+			for _, candidate in ipairs(signed and { signed, flat } or { flat }) do
+				local hit = i18n.Translate(candidate)
+				if hit ~= candidate then return hit end
+			end
+		end
+	end
+
 	-- Placeholder templates ("Grants {0}% increased Life"). Templates are indexed
 	-- by slot count and leading literal when the dictionary loads, so a lookup
 	-- narrows to a handful of candidates instead of scanning every key — without
@@ -832,6 +877,10 @@ function i18n.Translate(text)
 		local slots = select(2, text:gsub("%-?%d+%.?%d*", ""))
 		local bucket = i18n.templates[slots]
 		if bucket then
+			-- A line drawn in capitals cannot be matched against a key that
+			-- spells its words in sentence case, so both the discriminators
+			-- and the literals are compared lowercased.
+			local lowered = (not text:find("%l") and text:find("%a")) and text:lower() or nil
 			-- Literal-prefix templates ("Grants {0}% ...") and
 			-- leading-placeholder templates ("{0} points to node") live in
 			-- different buckets.
@@ -862,13 +911,13 @@ function i18n.Translate(text)
 			end
 
 			for _, which in ipairs(candidates) do
-				local group = bucket[which]
+				local group = bucket[lowered and which:lower() or which]
 				if group then
 					for _, tailKey in ipairs(tailKeys) do
-						local sub = group.sub[tailKey]
+						local sub = group.sub[lowered and tailKey:lower() or tailKey]
 						if sub then
 							for _, key in ipairs(sub) do
-								local values = matchPlaceholders(key, text)
+								local values = matchPlaceholders(key, text, lowered)
 								if values then
 									return fillPlaceholders(i18n.entries[key], values)
 								end
@@ -878,7 +927,7 @@ function i18n.Translate(text)
 					-- Keys with no derivable tail: nothing follows their first
 					-- placeholder, so the drawn string cannot be narrowed either.
 					for _, key in ipairs(group.free) do
-						local values = matchPlaceholders(key, text)
+						local values = matchPlaceholders(key, text, lowered)
 						if values then
 							return fillPlaceholders(i18n.entries[key], values)
 						end
@@ -890,7 +939,7 @@ function i18n.Translate(text)
 					-- reach here, so the cost is paid where there is no answer
 					-- to be had quickly.
 					for _, key in ipairs(group.all) do
-						local values = matchPlaceholders(key, text)
+						local values = matchPlaceholders(key, text, lowered)
 						if values then
 							return fillPlaceholders(i18n.entries[key], values)
 						end
@@ -943,7 +992,17 @@ function i18n.TranslateColoured(text)
 			end
 		end
 	end
-	if not changed then return text end
+	if not changed then
+		-- A colour code can sit in the middle of a sentence ("20% increased
+		-- ^xB97123Fire ^7Damage taken"), and splitting on it leaves fragments
+		-- that are not entries on their own. Retry the whole line with the
+		-- codes removed: the dictionary keys it that way, and its value
+		-- carries whatever colour the term should keep.
+		local plain = table.concat(parts)
+		local whole = i18n.Translate(plain)
+		if whole ~= plain then return whole end
+		return text
+	end
 
 	local out = { }
 	for i = 1, #parts do

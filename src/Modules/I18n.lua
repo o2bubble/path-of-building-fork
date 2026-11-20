@@ -1165,6 +1165,16 @@ function i18n.TranslateColoured(text)
 	if not text:find("%^") then return i18n.Translate(text) end
 
 	local parts, codes = splitEscapes(text)
+	-- A colour code can sit in the middle of a sentence ("20% increased
+	-- ^xB97123Fire ^7Damage taken"). Try the whole line with the codes
+	-- removed first: the dictionary keys full sentences that way, and a
+	-- sentence entry is always a better match than translating its fragments
+	-- one at a time -- which, once any fragment hits, would otherwise stop
+	-- the whole-line lookup from ever running and leave the rest in English.
+	local plain = table.concat(parts)
+	local whole = i18n.Translate(plain)
+	if whole ~= plain then return whole end
+
 	local changed = false
 	for i = 1, #parts do
 		if parts[i] ~= "" then
@@ -1175,17 +1185,7 @@ function i18n.TranslateColoured(text)
 			end
 		end
 	end
-	if not changed then
-		-- A colour code can sit in the middle of a sentence ("20% increased
-		-- ^xB97123Fire ^7Damage taken"), and splitting on it leaves fragments
-		-- that are not entries on their own. Retry the whole line with the
-		-- codes removed: the dictionary keys it that way, and its value
-		-- carries whatever colour the term should keep.
-		local plain = table.concat(parts)
-		local whole = i18n.Translate(plain)
-		if whole ~= plain then return whole end
-		return text
-	end
+	if not changed then return text end
 
 	local out = { }
 	for i = 1, #parts do

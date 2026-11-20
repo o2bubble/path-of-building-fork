@@ -45,3 +45,6 @@ runtime/SimpleGraphic/Screenshots
 
 .emmyrc.json
 .luarc.json
+
+# Runtime font kept locally as a fallback; the shipped one is NotoSansTC-Regular.ttf
+runtime/SimpleGraphic/Fonts/FZ_ZY.ttf

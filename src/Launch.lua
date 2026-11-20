@@ -359,6 +359,13 @@ function launch:DownloadPage(url, callback, params)
 		easy:setopt(curl.OPT_USERAGENT, "Path of Building/]]..self.versionNumber..[[")
 		easy:setopt(curl.OPT_ACCEPT_ENCODING, "")
 		easy:setopt(curl.OPT_FOLLOWLOCATION, 1)
+		-- Without these a transfer that stalls mid-body never returns: the
+		-- request stays open and the caller waits forever. The low-speed pair
+		-- only aborts a transfer that has stopped making progress, so a slow
+		-- but working link still finishes.
+		easy:setopt(curl.OPT_CONNECTTIMEOUT, 20)
+		easy:setopt(curl.OPT_LOW_SPEED_LIMIT, 1024)
+		easy:setopt(curl.OPT_LOW_SPEED_TIME, 60)
 		if requestBody then
 			easy:setopt(curl.OPT_POST, true)
 			easy:setopt(curl.OPT_POSTFIELDS, requestBody)

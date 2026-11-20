@@ -22,6 +22,9 @@ local function downloadFileText(source, file)
 		local escapedUrl = source..easy:escape(file)
 		easy:setopt_url(escapedUrl)
 		easy:setopt(curl.OPT_ACCEPT_ENCODING, "")
+		easy:setopt(curl.OPT_CONNECTTIMEOUT, 20)
+		easy:setopt(curl.OPT_LOW_SPEED_LIMIT, 1024)
+		easy:setopt(curl.OPT_LOW_SPEED_TIME, 60)
 		if connectionProtocol then
 			easy:setopt(curl.OPT_IPRESOLVE, connectionProtocol)
 		end
@@ -58,6 +61,9 @@ local function downloadFile(source, file, outName)
 		local escapedUrl = source..easy:escape(file)
 		easy:setopt_url(escapedUrl)
 		easy:setopt(curl.OPT_ACCEPT_ENCODING, "")
+		easy:setopt(curl.OPT_CONNECTTIMEOUT, 20)
+		easy:setopt(curl.OPT_LOW_SPEED_LIMIT, 1024)
+		easy:setopt(curl.OPT_LOW_SPEED_TIME, 60)
 		if connectionProtocol then
 			easy:setopt(curl.OPT_IPRESOLVE, connectionProtocol)
 		end

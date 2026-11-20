@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <PoBVersion>
-	<Version number="2.68.1" branch="dev" />
+	<Version number="2.68.1" platform="win32" branch="dev" />
 	<Source part="default" url="https://raw.githubusercontent.com/o2bubble/path-of-building-fork/{branch}/" />
 	<Source part="runtime" platform="win32" url="https://raw.githubusercontent.com/o2bubble/path-of-building-fork/{branch}/runtime/" />
 	<Source part="program" url="https://raw.githubusercontent.com/o2bubble/path-of-building-fork/{branch}/src/" />
@@ -180,7 +180,7 @@
 	<File name="Classes/SharedItemSetListControl.lua" part="program" sha1="3b29c71e57f89cc4fc20b9e363d8005bd5c0d77d" />
 	<File name="Classes/SkillListControl.lua" part="program" sha1="6d9dfc64bb870315cdde11a9055bbc954b2395b8" />
 	<File name="Classes/SkillSetListControl.lua" part="program" sha1="36e0fef7ce81df44fd01fe8e5c41147c0b4e811a" />
-	<File name="Classes/SkillsTab.lua" part="program" sha1="53c9023109b88d3157a8b41d14a61a4c3ed59022" />
+	<File name="Classes/SkillsTab.lua" part="program" sha1="9d58563974fab6c5c67376a1b17f711f0e819a07" />
 	<File name="Classes/SliderControl.lua" part="program" sha1="f0da4053b101d3a716e29940352f9d95071262c2" />
 	<File name="Classes/TextListControl.lua" part="program" sha1="e35177fb401b05ea94d139c177c8d861be03d13a" />
 	<File name="Classes/TimelessJewelListControl.lua" part="program" sha1="eb920415c5a44a836e4358c751f171e37ab34e81" />
@@ -379,7 +379,7 @@
 	<File name="Data/Vestigial.lua" part="program" sha1="9662791f2323ed5fb2f69f320df081ce73f83e4f" />
 	<File name="Data/Viscera.lua" part="program" sha1="753851083e69bdbcff5332e97d006a9e97ed31a1" />
 	<File name="GameVersions.lua" part="program" sha1="a476a52da1bf25bbb6978bee2b92dd1d5a3047c4" />
-	<File name="Launch.lua" part="program" sha1="1c8d7e690f8a1af9bca1519b6168c1479300883e" />
+	<File name="Launch.lua" part="program" sha1="b56c90125e6247ef793f35219cb4f84235dc3100" />
 	<File name="LaunchServer.lua" part="program" sha1="f15bdfbedaf887e19556490dce49b720f8365379" />
 	<File name="Modules/AddImplicitPopup.lua" part="program" sha1="f68d391d10b95c0feef70b7e8e82326a745dcb3b" />
 	<File name="Modules/Build.lua" part="program" sha1="774f0a13db949d2d3a4b4b2c7b9fb3eda2216b53" />
@@ -408,10 +408,10 @@
 	<File name="Modules/DataAbyssJewelLookUpTableHelper.lua" part="program" sha1="c95c4e8af0e9ab9c2abec801e5a279952754cf05" />
 	<File name="Modules/DataJewelFileLoader.lua" part="program" sha1="b8ec2fa593a005bbd9d46a858aa122eafd13cf77" />
 	<File name="Modules/DataLegionLookUpTableHelper.lua" part="program" sha1="40ed81537142296d67827de9f25930f2daac8ccf" />
-	<File name="Modules/I18n.lua" part="program" sha1="7bef85cb6b5224672d4b64154de8f5f4a3c10879" />
+	<File name="Modules/I18n.lua" part="program" sha1="fd3ec30fa9383f06db917e054502975ff51469f8" />
 	<File name="Modules/ItemSlotHelper.lua" part="program" sha1="4b7d441f9ade5d57c413aa1f8f8067b654cfb927" />
 	<File name="Modules/ItemTools.lua" part="program" sha1="754bbbed69c10706aa403446433c3741e21c4556" />
-	<File name="Modules/Main.lua" part="program" sha1="bcf4cb49a4731c00147e98a0dda9c9b5087f6c26" />
+	<File name="Modules/Main.lua" part="program" sha1="a0d522c5043a9f6894200a8a8c7f8fa7bc531d03" />
 	<File name="Modules/ModParser.lua" part="program" sha1="4ab89c50fdfe57bb5a130378d55a2d9306b1d2ab" />
 	<File name="Modules/ModTools.lua" part="program" sha1="c987491da4021b5bdc4744b5eec84fb5995284cf" />
 	<File name="Modules/PantheonTools.lua" part="program" sha1="ebe91a7d8f8444a6061acf4758da0e775cc8c314" />
@@ -419,29 +419,29 @@
 	<File name="Modules/ToastNotification.lua" part="program" sha1="87abe18f2c81a8df77e7e79248730e81ca5e03c5" />
 	<File name="Modules/Utils.lua" part="program" sha1="7fcb8936ef089aa9472d69920e206afe7cecf3c8" />
 	<File name="UpdateApply.lua" part="program" sha1="d7e47a29feff219c1ec3c6e4a19eb85b47691c26" />
-	<File name="UpdateCheck.lua" part="program" sha1="2f3861b4e89838150f16e4e09eb6012b0800fa68" />
-	<File name="abseil_dll.dll" part="runtime" runtime="win32" sha1="45e6db4e610088af894c0f462680e49b7ba9de04" />
-	<File name="brotlicommon.dll" part="runtime" runtime="win32" sha1="5d22d94cec08dec6b9dede32eb7253c4d14a7414" />
-	<File name="brotlidec.dll" part="runtime" runtime="win32" sha1="82f02cb25f403ce566fac8a7588e34e97e3ff8ed" />
-	<File name="brotlienc.dll" part="runtime" runtime="win32" sha1="ca07aa617caea03f130235e077c22a65d2db65af" />
-	<File name="bz2.dll" part="runtime" runtime="win32" sha1="133a4ff5683d82061c193ef462d10f25e1bc3d9b" />
-	<File name="concrt140.dll" part="runtime" runtime="win32" sha1="1ce87fac4c22aae82a81ddb26952c074b744e78d" />
-	<File name="d3dcompiler_47.dll" part="runtime" runtime="win32" sha1="27a4eff95e7f4a359718fda7138a528147969b27" />
-	<File name="fmt.dll" part="runtime" runtime="win32" sha1="0b7a255ab26dd167071bcdb2a024e15553d3d045" />
-	<File name="freetype.dll" part="runtime" runtime="win32" sha1="3f0a5e8c6d85a7725f9b9da3d74060b5919803ad" />
-	<File name="glfw3.dll" part="runtime" runtime="win32" sha1="934319bc4bc18a0e707a184c4022d705b171ec68" />
-	<File name="lcurl.dll" part="runtime" runtime="win32" sha1="d01c623798200e00d61d33f9c91ca64e2f1f88b5" />
-	<File name="libcurl.dll" part="runtime" runtime="win32" sha1="0fb92b991806e80670f268f978077bfe342aa389" />
-	<File name="libEGL.dll" part="runtime" runtime="win32" sha1="acb79b5d14fe1864626ae2df69d6115275f3f825" />
-	<File name="libGLESv2.dll" part="runtime" runtime="win32" sha1="605dc77d63443ba47a59f311afc04164b4f39fb5" />
-	<File name="libpng16.dll" part="runtime" runtime="win32" sha1="d7916c90ea148e6802e3d180cd0bc5cfff0b57a3" />
-	<File name="libsharpyuv.dll" part="runtime" runtime="win32" sha1="418ac47e975723312da25f62fa0be6be7de7c174" />
-	<File name="libwebp.dll" part="runtime" runtime="win32" sha1="24b640355523f54f0ba87a3aa8d35b2912748ff6" />
-	<File name="libwebpdecoder.dll" part="runtime" runtime="win32" sha1="94cf64c248e45033e244c57b43be40a0d4d094f3" />
-	<File name="libwebpdemux.dll" part="runtime" runtime="win32" sha1="43f92be42d6d2cd9fdd222d1ec9bff4681ce3c0c" />
-	<File name="libwebpmux.dll" part="runtime" runtime="win32" sha1="26a1ecf443eeb69661828be5a932d465317c2ebb" />
-	<File name="lua51.dll" part="runtime" runtime="win32" sha1="18276ba0942b8968cc7d7d8c36a1dbdfc8e9246a" />
-	<File name="lua-utf8.dll" part="runtime" runtime="win32" sha1="e2119fe0a4a692881c3a801f2d8997158ced2986" />
+	<File name="UpdateCheck.lua" part="program" sha1="99040b033c4e5d64a77471718b5d7290415affac" />
+	<File name="abseil_dll.dll" part="runtime" platform="win32" sha1="45e6db4e610088af894c0f462680e49b7ba9de04" />
+	<File name="brotlicommon.dll" part="runtime" platform="win32" sha1="5d22d94cec08dec6b9dede32eb7253c4d14a7414" />
+	<File name="brotlidec.dll" part="runtime" platform="win32" sha1="82f02cb25f403ce566fac8a7588e34e97e3ff8ed" />
+	<File name="brotlienc.dll" part="runtime" platform="win32" sha1="ca07aa617caea03f130235e077c22a65d2db65af" />
+	<File name="bz2.dll" part="runtime" platform="win32" sha1="133a4ff5683d82061c193ef462d10f25e1bc3d9b" />
+	<File name="concrt140.dll" part="runtime" platform="win32" sha1="1ce87fac4c22aae82a81ddb26952c074b744e78d" />
+	<File name="d3dcompiler_47.dll" part="runtime" platform="win32" sha1="27a4eff95e7f4a359718fda7138a528147969b27" />
+	<File name="fmt.dll" part="runtime" platform="win32" sha1="0b7a255ab26dd167071bcdb2a024e15553d3d045" />
+	<File name="freetype.dll" part="runtime" platform="win32" sha1="3f0a5e8c6d85a7725f9b9da3d74060b5919803ad" />
+	<File name="glfw3.dll" part="runtime" platform="win32" sha1="934319bc4bc18a0e707a184c4022d705b171ec68" />
+	<File name="lcurl.dll" part="runtime" platform="win32" sha1="d01c623798200e00d61d33f9c91ca64e2f1f88b5" />
+	<File name="libcurl.dll" part="runtime" platform="win32" sha1="0fb92b991806e80670f268f978077bfe342aa389" />
+	<File name="libEGL.dll" part="runtime" platform="win32" sha1="acb79b5d14fe1864626ae2df69d6115275f3f825" />
+	<File name="libGLESv2.dll" part="runtime" platform="win32" sha1="605dc77d63443ba47a59f311afc04164b4f39fb5" />
+	<File name="libpng16.dll" part="runtime" platform="win32" sha1="d7916c90ea148e6802e3d180cd0bc5cfff0b57a3" />
+	<File name="libsharpyuv.dll" part="runtime" platform="win32" sha1="418ac47e975723312da25f62fa0be6be7de7c174" />
+	<File name="libwebp.dll" part="runtime" platform="win32" sha1="24b640355523f54f0ba87a3aa8d35b2912748ff6" />
+	<File name="libwebpdecoder.dll" part="runtime" platform="win32" sha1="94cf64c248e45033e244c57b43be40a0d4d094f3" />
+	<File name="libwebpdemux.dll" part="runtime" platform="win32" sha1="43f92be42d6d2cd9fdd222d1ec9bff4681ce3c0c" />
+	<File name="libwebpmux.dll" part="runtime" platform="win32" sha1="26a1ecf443eeb69661828be5a932d465317c2ebb" />
+	<File name="lua51.dll" part="runtime" platform="win32" sha1="18276ba0942b8968cc7d7d8c36a1dbdfc8e9246a" />
+	<File name="lua-utf8.dll" part="runtime" platform="win32" sha1="e2119fe0a4a692881c3a801f2d8997158ced2986" />
 	<File name="lua/base64.lua" part="runtime" sha1="18629865eb351e483178b6524fb3935cbc9b8297" />
 	<File name="lua/dkjson.lua" part="runtime" sha1="a318615b8b7615809805857e35562ffd7bba400e" />
 	<File name="lua/sha1/bit32_ops.lua" part="runtime" sha1="25bc8def626fd8d8bd3d37dcd96808c6b8b00087" />
@@ -453,15 +453,15 @@
 	<File name="lua/sha2.lua" part="runtime" sha1="be1204772be5b5cb29f0ba65f1323b08f561bf6b" />
 	<File name="lua/socket.lua" part="runtime" sha1="33842fc36ea37caf272d31503d8b863edb42a4fb" />
 	<File name="lua/xml.lua" part="runtime" sha1="5add8e081e238de867fbc02c5a5391b11dffd7cf" />
-	<File name="lzip.dll" part="runtime" runtime="win32" sha1="15f9f74d2f96f8d93518615d6492130024425a14" />
-	<File name="msvcp140.dll" part="runtime" runtime="win32" sha1="b370eca8fa727e46cf61d834fcc956698b02e1fd" />
-	<File name="msvcp140_1.dll" part="runtime" runtime="win32" sha1="9ce5c3d6c7d94b175f136f552af8771dca6147b3" />
-	<File name="msvcp140_2.dll" part="runtime" runtime="win32" sha1="e48159bb2127ec812ff679f6fabc41141009f26a" />
-	<File name="msvcp140_atomic_wait.dll" part="runtime" runtime="win32" sha1="a85a6a4de6656e5969fa4ab15f2230dfe2839e75" />
-	<File name="msvcp140_codecvt_ids.dll" part="runtime" runtime="win32" sha1="91b19dd0db24a5cbd944eca9c67fad3b53f9c154" />
-	<File name="Path{space}of{space}Building.exe" part="runtime" runtime="win32" sha1="8dcd46aac0b70d0a4d5eac5c7244302c9b805f85" />
-	<File name="re2.dll" part="runtime" runtime="win32" sha1="23c06a0caab76c8dd893385c1df7fc1a244ae228" />
-	<File name="SimpleGraphic.dll" part="runtime" runtime="win32" sha1="e2222e7e7d1f376fc1dee0e76d319965db27e926" />
+	<File name="lzip.dll" part="runtime" platform="win32" sha1="15f9f74d2f96f8d93518615d6492130024425a14" />
+	<File name="msvcp140.dll" part="runtime" platform="win32" sha1="b370eca8fa727e46cf61d834fcc956698b02e1fd" />
+	<File name="msvcp140_1.dll" part="runtime" platform="win32" sha1="9ce5c3d6c7d94b175f136f552af8771dca6147b3" />
+	<File name="msvcp140_2.dll" part="runtime" platform="win32" sha1="e48159bb2127ec812ff679f6fabc41141009f26a" />
+	<File name="msvcp140_atomic_wait.dll" part="runtime" platform="win32" sha1="a85a6a4de6656e5969fa4ab15f2230dfe2839e75" />
+	<File name="msvcp140_codecvt_ids.dll" part="runtime" platform="win32" sha1="91b19dd0db24a5cbd944eca9c67fad3b53f9c154" />
+	<File name="Path{space}of{space}Building.exe" part="runtime" platform="win32" sha1="8dcd46aac0b70d0a4d5eac5c7244302c9b805f85" />
+	<File name="re2.dll" part="runtime" platform="win32" sha1="23c06a0caab76c8dd893385c1df7fc1a244ae228" />
+	<File name="SimpleGraphic.dll" part="runtime" platform="win32" sha1="e2222e7e7d1f376fc1dee0e76d319965db27e926" />
 	<File name="SimpleGraphic/Fonts/Bitstream Vera Sans Mono.10.tga" part="runtime" sha1="12e59115634000273611ef08b0d1b130ea95d4a7" />
 	<File name="SimpleGraphic/Fonts/Bitstream Vera Sans Mono.12.tga" part="runtime" sha1="325378beb3e4944f1504b402bdd809c99b240c1d" />
 	<File name="SimpleGraphic/Fonts/Bitstream Vera Sans Mono.14.tga" part="runtime" sha1="0df6084dca4762df282cc4ab1ad5ddc21e9c6e12" />
@@ -582,13 +582,15 @@
 	<File name="SimpleGraphic/Fonts/Liberation Sans.64.tga" part="runtime" sha1="301ad24fae1b872d28632b9bfcb9f3e0889a0925" />
 	<File name="SimpleGraphic/Fonts/Liberation Sans.tgf" part="runtime" sha1="4048906c89ff0fd7f8799d038978b96e5e7b40b9" />
 	<File name="SimpleGraphic/Fonts/NotoSansTC-Regular.ttf" part="runtime" sha1="640b1a337bd9bc3dc259003daaede06429fd6008" />
-	<File name="socket.dll" part="runtime" runtime="win32" sha1="c5349627b0115eb72420d1869f8aab4a5d5e87d0" />
-	<File name="vcruntime140.dll" part="runtime" runtime="win32" sha1="3d2998a27d164dd7cc3bc7d3eca08acf89a0ee42" />
-	<File name="vcruntime140_1.dll" part="runtime" runtime="win32" sha1="a0330279d3d0d47f19ed984726e25260b547a228" />
-	<File name="xxhash.dll" part="runtime" runtime="win32" sha1="b8458f14d41472b012c14f17a29ed0075024628f" />
-	<File name="z.dll" part="runtime" runtime="win32" sha1="a2ca153cdaa81a3f717af2144541912117123e52" />
-	<File name="zlib1.dll" part="runtime" runtime="win32" sha1="49f1ccf17328fca0a831555a35b8eacb1e845ae0" />
-	<File name="zstd.dll" part="runtime" runtime="win32" sha1="39cb3ad3424127896feb5eb065dcc30a4aaccb2c" />
+	<File name="SimpleGraphic/Screenshots/111826_235137.jpg" part="runtime" sha1="b7fb1da5a3f819833a70302a590f1a723a8d07cd" />
+	<File name="SimpleGraphic/SimpleGraphic.cfg.bak" part="runtime" sha1="151765fc35f1138a58746302a76f3e5e6362da72" />
+	<File name="socket.dll" part="runtime" platform="win32" sha1="c5349627b0115eb72420d1869f8aab4a5d5e87d0" />
+	<File name="vcruntime140.dll" part="runtime" platform="win32" sha1="3d2998a27d164dd7cc3bc7d3eca08acf89a0ee42" />
+	<File name="vcruntime140_1.dll" part="runtime" platform="win32" sha1="a0330279d3d0d47f19ed984726e25260b547a228" />
+	<File name="xxhash.dll" part="runtime" platform="win32" sha1="b8458f14d41472b012c14f17a29ed0075024628f" />
+	<File name="z.dll" part="runtime" platform="win32" sha1="a2ca153cdaa81a3f717af2144541912117123e52" />
+	<File name="zlib1.dll" part="runtime" platform="win32" sha1="49f1ccf17328fca0a831555a35b8eacb1e845ae0" />
+	<File name="zstd.dll" part="runtime" platform="win32" sha1="39cb3ad3424127896feb5eb065dcc30a4aaccb2c" />
 	<File name="TreeData/2_6/skill_sprite-3-32f639bbfc42783ca7ec218a787dd918.jpg" part="tree" sha1="dc7a2a0383847ac28eade8a31a57a8bfa7b298e4" />
 	<File name="TreeData/2_6/skill_sprite-active-3-3e73c4c4534433ecfc340c7287093bd5.png" part="tree" sha1="baa878007cfac73bee50958d25617b95c0e73a2d" />
 	<File name="TreeData/2_6/skill_sprite-active-3-7798fabab8a21829831293c20ac9c414.jpg" part="tree" sha1="526654400851f032d3d2f46980c0ecc077aa0c4c" />

@@ -228,59 +228,68 @@ for index, data in ipairs(updateFiles) do
 	if UpdateProgress then
 		UpdateProgress("Downloading %d/%d", index, #updateFiles)
 	end
-	local partSources = remoteSources[data.part]
-	local source = partSources[localPlatform] or partSources["any"]
-	source = source:gsub("{branch}", localBranch)
-	local fileName = scriptPath.."/Update/"..data.name:gsub("[\\/]","{slash}")
-	data.updateFileName = fileName
-	local zipName = source:match("/([^/]+%.zip)$")
-	if zipName then
-		if not zipFiles[zipName] then
-			ConPrintf("Downloading %s...", zipName)
-			local zipFileName = scriptPath.."/Update/"..zipName
-			downloadFile(source, "", zipFileName)
-			zipFiles[zipName] = lzip.open(zipFileName)
-		end
-		local zip = zipFiles[zipName]
-		if zip then
-			local zippedFile = zip:OpenFile(data.name)
-			if zippedFile then
-				local file = io.open(fileName, "wb+")
-				file:write(zippedFile:Read("*a"))
-				file:close()
-				zippedFile:Close()
+	-- A manifest can name a part the sources do not define (a runtime file
+	-- next to a manifest whose Version carries no platform, for instance).
+	-- That must fail this file, not the whole update thread.
+	local partSources = remoteSources[data.part] or { }
+	local source = partSources[localPlatform or "win32"] or partSources["any"]
+	if not source then
+		ConPrintf("No source for part '%s' (file '%s')", tostring(data.part), data.name)
+		failedFile = true
+		data.unresolved = true
+	else
+		source = source:gsub("{branch}", localBranch)
+		local fileName = scriptPath.."/Update/"..data.name:gsub("[\\/]","{slash}")
+		data.updateFileName = fileName
+		local zipName = source:match("/([^/]+%.zip)$")
+		if zipName then
+			if not zipFiles[zipName] then
+				ConPrintf("Downloading %s...", zipName)
+				local zipFileName = scriptPath.."/Update/"..zipName
+				downloadFile(source, "", zipFileName)
+				zipFiles[zipName] = lzip.open(zipFileName)
+			end
+			local zip = zipFiles[zipName]
+			if zip then
+				local zippedFile = zip:OpenFile(data.name)
+				if zippedFile then
+					local file = io.open(fileName, "wb+")
+					file:write(zippedFile:Read("*a"))
+					file:close()
+					zippedFile:Close()
+				else
+					ConPrintf("Couldn't extract '%s' from '%s' (extract failed)", data.name, zipName)
+				end
 			else
-				ConPrintf("Couldn't extract '%s' from '%s' (extract failed)", data.name, zipName)
+				ConPrintf("Couldn't extract '%s' from '%s' (zip open failed)", data.name, zipName)
 			end
 		else
-			ConPrintf("Couldn't extract '%s' from '%s' (zip open failed)", data.name, zipName)
+			local skipDownload
+			local file = io.open(fileName, "rb")
+			if file then
+				local content = file:read("*all")
+				if data.sha1 == sha1(content) or data.sha1 == sha1(content:gsub("\n", "\r\n")) then
+					ConPrintf("Using file from previous update attempt '%s'", fileName)
+					skipDownload = true
+				end
+				file:close()
+			end
+			if not skipDownload then
+				ConPrintf("Downloading %s... (%d of %d)", data.name, index, #updateFiles)
+				downloadFile(source, data.name, fileName)
+			end
 		end
-	else
-		local skipDownload
 		local file = io.open(fileName, "rb")
-		if file then
+		if not file then
+			failedFile = true
+		else
 			local content = file:read("*all")
-			if data.sha1 == sha1(content) or data.sha1 == sha1(content:gsub("\n", "\r\n")) then
-				ConPrintf("Using file from previous update attempt '%s'", fileName)
-				skipDownload = true
+			if data.sha1 ~= sha1(content) and data.sha1 ~= sha1(content:gsub("\n", "\r\n")) then
+				ConPrintf("Hash mismatch on '%s'", fileName)
+				failedFile = true
 			end
 			file:close()
 		end
-		if not skipDownload then
-			ConPrintf("Downloading %s... (%d of %d)", data.name, index, #updateFiles)
-			downloadFile(source, data.name, fileName)
-		end
-	end
-	local file = io.open(fileName, "rb")
-	if not file then
-		failedFile = true
-	else
-		local content = file:read("*all")
-		if data.sha1 ~= sha1(content) and data.sha1 ~= sha1(content:gsub("\n", "\r\n")) then
-			ConPrintf("Hash mismatch on '%s'", fileName)
-			failedFile = true
-		end
-		file:close()
 	end
 end
 for name, zip in pairs(zipFiles) do

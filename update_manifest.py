@@ -121,7 +121,7 @@ def create_manifest(
             sha1 = hashlib.sha1(data).hexdigest()
             name = path.relative_to(config[section]["path"]).as_posix()
             attributes = (
-                {"name": name, "part": section, "runtime": "win32", "sha1": sha1}
+                {"name": name, "part": section, "platform": "win32", "sha1": sha1}
                 if path.suffix in [".dll", ".exe"]
                 else {"name": name, "part": section, "sha1": sha1}
             )
@@ -132,7 +132,13 @@ def create_manifest(
     root = Et.Element("PoBVersion")
     # The branch has to be recorded or the runtime refuses to resolve {branch}
     # in the Source URLs ("invalid local manifest").
-    Et.SubElement(root, "Version", number=new_version, branch=branch)
+    #
+    # The platform is what the updater uses to pick a source for the runtime
+    # part: it looks up sources[platform], and that part is the only one
+    # declared per platform. Without it the lookup finds nothing, the source
+    # is nil, and the update thread dies on the first runtime file it has to
+    # fetch -- which is what happened to a release whose manifest omitted it.
+    Et.SubElement(root, "Version", number=new_version, platform="win32", branch=branch)
     for attributes in parts:
         Et.SubElement(root, "Source", attributes)
     for attributes in files:

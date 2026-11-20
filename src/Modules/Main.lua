@@ -1385,7 +1385,10 @@ function main:OpenOptionsPopup(savedState)
 			self.modes.LIST:BuildList()
 		end
 		if not launch.devMode then
-			main:SetManifestBranch(self.betaTest and "beta" or "master")
+			-- This fork ships from "dev"; upstream's "master" is its base without
+			-- any of the localization, so pointing program updates there would
+			-- offer to replace every localized file with the English original.
+			main:SetManifestBranch(self.betaTest and "beta" or "dev")
 		end
 		SetDPIScaleOverridePercent(self.dpiScaleOverridePercent)
 		main:ClosePopup()

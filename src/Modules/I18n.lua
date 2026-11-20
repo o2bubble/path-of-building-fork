@@ -130,6 +130,86 @@ local function matchPlaceholders(key, text, lowered)
 	return values
 end
 
+-- A slot stands for a formatted number, so a capture that is not one means the
+-- key's literals never lined up with the drawn text. "Adds {1} Damage to
+-- Attacks" matches "Adds 1 to 41 Lightning Damage to Attacks" by swallowing
+-- "41 Lightning", and that key is as eligible as the right one -- which of them
+-- the bucket lists first depends on the order the dictionary was indexed in,
+-- and that order is a hash. Entries are stored keyed by a private table, so
+-- "first match wins" means the winner is arbitrary. Prefer the match that
+-- consumed nothing but values; keep the first looser match as a fallback so a
+-- legitimate non-numeric slot still resolves when it is the only one there is.
+local function isValue(text)
+	return text:find("^[%+%-]?%d[%d,]*%.?%d*$") ~= nil
+end
+
+-- Characters of a key that are its own text rather than a placeholder; the
+-- higher it is, the more of the drawn string the key pins down.
+local keyLiterals = { }
+
+local function literalLength(key)
+	local n = keyLiterals[key]
+	if n == nil then
+		n = #key
+		for slot in key:gmatch("{%d+[^}]*}") do n = n - #slot end
+		keyLiterals[key] = n
+	end
+	return n
+end
+
+-- Best match in one bucket list: the first one whose captures are all values,
+-- else the first that matched at all. A bucket can hold well over a thousand
+-- keys, so the scan stops at the first fully-numeric match instead of
+-- comparing every candidate -- which only picks the right key if the list is
+-- ordered, and that is what sortBuckets below does.
+local function matchList(list, text, lowered)
+	local looseKey, looseValues
+	for i = 1, #list do
+		local key = list[i]
+		local values = matchPlaceholders(key, text, lowered)
+		if values then
+			local tight = true
+			for _, capture in pairs(values) do
+				if not isValue(capture) then
+					tight = false
+					break
+				end
+			end
+			if tight then return key, values end
+			if not looseKey then
+				looseKey, looseValues = key, values
+			end
+		end
+	end
+	return looseKey, looseValues
+end
+
+-- Order every bucket list so the scan above is deterministic. The buckets are
+-- filled while the dictionary is decoded, and decoding walks a hash table, so
+-- two keys that both match one drawn line ("+{0}% to Critical Strike Chance"
+-- and "{0:+d}% to Critical Strike Chance") come out in a different order on
+-- each launch -- the UI would translate the same line one way now and another
+-- way after a restart. Sorting once at load removes that, and puts the key
+-- that pins down the most text first.
+local function moreSpecific(a, b)
+	local la, lb = literalLength(a), literalLength(b)
+	if la ~= lb then return la > lb end
+	if #a ~= #b then return #a < #b end
+	return a < b
+end
+
+local function sortBuckets()
+	for _, bucket in pairs(i18n.templates) do
+		for _, group in pairs(bucket) do
+			table.sort(group.all, moreSpecific)
+			table.sort(group.free, moreSpecific)
+			for _, sub in pairs(group.sub) do
+				table.sort(sub, moreSpecific)
+			end
+		end
+	end
+end
+
 -- Substitute a template's placeholders with the captured values.
 local function fillPlaceholders(template, values)
 	return (template:gsub("{(%d+)[^}]*}", function(slot)
@@ -773,6 +853,7 @@ function i18n.Load(dataDir, locale)
 	i18n.loaded = total > 0
 	if i18n.loaded then
 		buildReverseIndex()
+		sortBuckets()
 	end
 	ConPrintf("[i18n] loaded %d entries (%s)", total, locale)
 end
@@ -909,6 +990,34 @@ function i18n.Translate(text)
 		end
 	end
 
+	-- An affix that carries more than one mod line is drawn with the lines
+	-- joined by "/" (ItemsTab builds the label as table.concat(mod, "/")).
+	-- Each line is a key of its own; the joined string is not, so translate the
+	-- parts and keep the separator. This runs before the placeholder templates:
+	-- "{0}% of Damage Leeched as Life while Focused" also matches
+	-- "You have Vaal Pact while Focused/10% of Damage Leeched as Life while
+	-- Focused", swallowing the first line into the slot. Only take the result
+	-- when every part translated, so a "/" inside one line is left alone.
+	if text:find("/", 1, true) and #text <= 400 then
+		local parts, out = { }, { }
+		local from = 1
+		while true do
+			local a, b = text:find("/", from, true)
+			parts[#parts + 1] = text:sub(from, (a and a - 1) or #text)
+			if not a then break end
+			from = b + 1
+		end
+		if #parts > 1 then
+			local complete = true
+			for i, part in ipairs(parts) do
+				local hit = i18n.Translate(part)
+				if hit == part then complete = false break end
+				out[i] = hit
+			end
+			if complete then return table.concat(out, "/") end
+		end
+	end
+
 	-- Placeholder templates ("Grants {0}% increased Life"). Templates are indexed
 	-- by slot count and leading literal when the dictionary loads, so a lookup
 	-- narrows to a handful of candidates instead of scanning every key — without
@@ -956,21 +1065,17 @@ function i18n.Translate(text)
 					for _, tailKey in ipairs(tailKeys) do
 						local sub = group.sub[lowered and tailKey:lower() or tailKey]
 						if sub then
-							for _, key in ipairs(sub) do
-								local values = matchPlaceholders(key, text, lowered)
-								if values then
-									return fillPlaceholders(i18n.entries[key], values)
-								end
+							local key, values = matchList(sub, text, lowered)
+							if key then
+								return fillPlaceholders(i18n.entries[key], values)
 							end
 						end
 					end
 					-- Keys with no derivable tail: nothing follows their first
 					-- placeholder, so the drawn string cannot be narrowed either.
-					for _, key in ipairs(group.free) do
-						local values = matchPlaceholders(key, text, lowered)
-						if values then
-							return fillPlaceholders(i18n.entries[key], values)
-						end
+					local key, values = matchList(group.free, text, lowered)
+					if key then
+						return fillPlaceholders(i18n.entries[key], values)
 					end
 					-- Last resort. A key's tail is derived from where its first
 					-- placeholder sits; when the drawn string puts a number
@@ -978,11 +1083,9 @@ function i18n.Translate(text)
 					-- wrong slot and only a full scan finds the key. Only misses
 					-- reach here, so the cost is paid where there is no answer
 					-- to be had quickly.
-					for _, key in ipairs(group.all) do
-						local values = matchPlaceholders(key, text, lowered)
-						if values then
-							return fillPlaceholders(i18n.entries[key], values)
-						end
+					key, values = matchList(group.all, text, lowered)
+					if key then
+						return fillPlaceholders(i18n.entries[key], values)
 					end
 				end
 			end

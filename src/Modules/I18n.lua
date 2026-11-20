@@ -774,6 +774,32 @@ end
 local function probeExact(text)
 	local d = i18n.entries[text]
 	if d then return d end
+	-- Controls often reset the colour before drawing a label ("^7Strength:")
+	-- so it inherits nothing from whatever was drawn last. The dictionary
+	-- keys the label without that prefix, so look it up and put the prefix
+	-- back on the way out.
+	-- A colour code is "^x" plus six hex digits, or "^" plus one digit.
+	-- Lua patterns have no alternation, so the runs are walked one at a time.
+	local pos = 1
+	while true do
+		local a, b = text:find("^%^x%x%x%x%x%x%x", pos)
+		if not a then a, b = text:find("^%^%d", pos) end
+		if not a then break end
+		pos = b + 1
+	end
+	local lead = pos > 1 and text:sub(1, pos - 1) or nil
+	if lead then
+		local body = text:sub(pos)
+		local hit = i18n.entries[body]
+		if hit then return lead .. hit end
+		if body:sub(-1) == ":" then
+			local bare = i18n.entries[body:sub(1, -2)]
+			if bare then return lead .. bare .. ":" end
+		else
+			local plus = i18n.entries[body .. ":"]
+			if plus then return lead .. plus end
+		end
+	end
 	-- Multiline labels are drawn with whatever padding the literal carried.
 	-- Retry without it before giving up on the entry.
 	local trimmed = text:gsub("^[\r\n]+", ""):gsub("[\r\n]+$", "")

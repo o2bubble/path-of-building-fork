@@ -131,7 +131,13 @@ function main:Init()
 	-- dictionary repository; pointing it elsewhere is all a mirror needs.
 	self.i18nRepo = "https://github.com/o2bubble/path-of-building-i18n"
 	self.i18nAutoUpdate = true
-	
+	-- Program updates resolve against this fork's manifest, never upstream's,
+	-- so applying one cannot overwrite the localized build. Off by default: an
+	-- update replaces files in src/, and a broken commit on the branch would
+	-- break the next launch. LoadSettings applies the saved choice to
+	-- launch.updatesDisabled.
+	self.programAutoUpdate = false
+
 	if not SetDPIScaleOverridePercent then SetDPIScaleOverridePercent = function(scale) end end
 
 	if launch.devMode and IsKeyDown("CTRL") or os.getenv("REGENERATE_MOD_CACHE") == "1" then
@@ -722,6 +728,13 @@ function main:LoadSettings(ignoreBuild)
 				if node.attrib.i18nAutoUpdate then
 					self.i18nAutoUpdate = node.attrib.i18nAutoUpdate == "true"
 				end
+				if node.attrib.programAutoUpdate then
+					self.programAutoUpdate = node.attrib.programAutoUpdate == "true"
+				end
+				-- Launch defaults updates off; this is where the saved choice
+				-- takes effect. Ctrl+U and the 12-hour check both read the flag
+				-- at call time, so nothing else has to change.
+				launch.updatesDisabled = not self.programAutoUpdate
 				if POB_I18N then
 					POB_I18N.repoUrl = self.i18nRepo
 				end
@@ -861,6 +874,7 @@ function main:SaveSettings()
 		language = self.language,
 		i18nRepo = self.i18nRepo,
 		i18nAutoUpdate = tostring(self.i18nAutoUpdate),
+		programAutoUpdate = tostring(self.programAutoUpdate),
 	} })
 	local res, errMsg = common.xml.SaveXMLFile(setXML, self.userPath.."Settings.xml")
 	if not res then
@@ -949,7 +963,8 @@ function main:OpenOptionsPopup(savedState)
 		dpiScaleOverridePercent = self.dpiScaleOverridePercent,
 		language = self.language,
 		i18nRepo = self.i18nRepo,
-		i18nAutoUpdate = self.i18nAutoUpdate
+		i18nAutoUpdate = self.i18nAutoUpdate,
+		programAutoUpdate = self.programAutoUpdate
 	}
 
 	-- NOTE: Height needs to be adjusted if more menu options are added
@@ -1049,6 +1064,16 @@ function main:OpenOptionsPopup(savedState)
 		controls.i18nStatusLabel = new("LabelControl"):LabelControl({ "TOPLEFT", controls.sectionAnchor, "TOPLEFT" }, { currentX + defaultLabelPlacementX, currentY, 0, 16 }, function()
 			return self.i18nStatus or ""
 		end)
+		nextRow()
+		-- Program updates resolve against this fork's manifest. Off by default:
+		-- an update replaces files in src/, so a broken commit on the branch
+		-- would break the next launch.
+		controls.programAutoUpdate = new("CheckBoxControl"):CheckBoxControl({ "TOPLEFT", controls.sectionAnchor, "TOPLEFT" }, { currentX + defaultLabelPlacementX, currentY, 20 }, "^7Check for program updates on startup", function(state)
+			self.programAutoUpdate = state
+			launch.updatesDisabled = not state
+		end)
+		controls.programAutoUpdate.labelRight = true
+		controls.programAutoUpdate.state = self.programAutoUpdate
 		nextRow()
 	end
 

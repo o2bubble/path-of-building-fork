@@ -45,11 +45,25 @@ def _alphanumeric(key: str) -> list[int | str]:
     ]
 
 
-def create_manifest(version: str | None = None, replace: bool = False) -> None:
+DEFAULT_BASE_URL = "https://raw.githubusercontent.com/o2bubble/path-of-building-fork/{branch}/"
+DEFAULT_BRANCH = "dev"
+
+
+def create_manifest(
+    version: str | None = None,
+    replace: bool = False,
+    base_url: str = DEFAULT_BASE_URL,
+    branch: str = DEFAULT_BRANCH,
+) -> None:
     """Generate new SHA1 hashes and version number for Path of Building's manifest file.
+
+    The base URL is this fork's, not upstream's: an update must never pull
+    upstream files over the localized ones.
 
     :param version: Three-part version number following https://semver.org/.
     :param replace: Whether to overwrite the existing manifest file.
+    :param base_url: Download root, with "{branch}" where the branch goes.
+    :param branch: Branch the "{branch}" placeholder resolves to at runtime.
     :return:
     """
     base_path = pathlib.Path().absolute()
@@ -73,7 +87,6 @@ def create_manifest(version: str | None = None, replace: bool = False) -> None:
         logging.critical(f"Manifest configuration file not found in path '{base_path}'")
         return
 
-    base_url = "https://raw.githubusercontent.com/PathOfBuildingCommunity/PathOfBuilding/{branch}/"
     parts: list[dict[str, str]] = []
     for part in config.sections():
         url = base_url + config[part]["path"]
@@ -117,7 +130,9 @@ def create_manifest(version: str | None = None, replace: bool = False) -> None:
     files.sort(key=lambda attr: (attr["part"], _alphanumeric(attr["name"])))
 
     root = Et.Element("PoBVersion")
-    Et.SubElement(root, "Version", number=new_version)
+    # The branch has to be recorded or the runtime refuses to resolve {branch}
+    # in the Source URLs ("invalid local manifest").
+    Et.SubElement(root, "Version", number=new_version, branch=branch)
     for attributes in parts:
         Et.SubElement(root, "Source", attributes)
     for attributes in files:
@@ -154,12 +169,24 @@ def cli() -> None:
         help="Set manifest version number",
         metavar="SEMVER",
     )
+    parser.add_argument(
+        "--base-url",
+        action="store",
+        help=f"Download root, with {{branch}} placeholder (default: {DEFAULT_BASE_URL})",
+        default=DEFAULT_BASE_URL,
+    )
+    parser.add_argument(
+        "--branch",
+        action="store",
+        help=f"Branch the {{branch}} placeholder resolves to (default: {DEFAULT_BRANCH})",
+        default=DEFAULT_BRANCH,
+    )
     args = parser.parse_args()
     if args.verbose:
         logging.basicConfig(level=logging.INFO)
     elif args.quiet:
         logging.basicConfig(level=logging.CRITICAL + 1)
-    create_manifest(args.set_version or None, args.in_place)
+    create_manifest(args.set_version or None, args.in_place, args.base_url, args.branch)
 
 
 if __name__ == "__main__":

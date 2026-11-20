@@ -106,6 +106,12 @@ function launch:OnInit()
 		-- Looks like a remote manifest, so we're probably running from a repository
 		-- Enable dev mode to disable updates and set user path to be the script path
 		self.devMode = true
+	elseif self.forkMode and localManXML then
+		-- The fork's manifest names a branch, so the check above no longer
+		-- recognises a repository run. Keep dev mode anyway: this is still a
+		-- working tree, and F5 restarts and the Alt modifier display matter
+		-- while the localization is being worked on.
+		self.devMode = true
 	end
 	local installedFile = io.open("installed.cfg", "r")
 	if installedFile then
@@ -410,7 +416,8 @@ end
 
 function launch:CheckForUpdate(inBackground)
 	if self.updatesDisabled then
-		-- Fork build: the upstream manifest would replace every localized file.
+		-- Off unless the user turned it on in Options; LoadSettings applies
+		-- that choice here.
 		return
 	end
 	if self.updateCheckRunning then

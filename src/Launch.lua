@@ -106,17 +106,25 @@ function launch:OnInit()
 		-- Looks like a remote manifest, so we're probably running from a repository
 		-- Enable dev mode to disable updates and set user path to be the script path
 		self.devMode = true
-	elseif self.forkMode and localManXML then
-		-- The fork's manifest names a branch, so the check above no longer
-		-- recognises a repository run. Keep dev mode anyway: this is still a
-		-- working tree, and F5 restarts and the Alt modifier display matter
-		-- while the localization is being worked on.
-		self.devMode = true
 	end
 	local installedFile = io.open("installed.cfg", "r")
 	if installedFile then
 		self.installedMode = true
 		installedFile:close()
+	end
+	-- A repository run keeps its builds and settings beside the scripts rather
+	-- than in the shared user folder, which an installed PoB may already own.
+	-- That used to ride on devMode; it is separate now, so a fork build gets
+	-- its own data folder without the developer banner, F5 restart and debug
+	-- logging that devMode also switches on.
+	self.portableMode = self.devMode
+		or (self.forkMode and not self.installedMode)
+		or (GetScriptPath() == GetRuntimePath() and not self.installedMode)
+	-- Developer mode is opt-in for the fork: POB_DEV_MODE=1 brings back the
+	-- banner, F5 restart, the Ctrl+Shift debug paths and dev autosave.
+	if os.getenv("POB_DEV_MODE") == "1" then
+		self.devMode = true
+		self.portableMode = true
 	end
 	RenderInit("DPI_AWARE")
 

@@ -379,7 +379,7 @@
 	<File name="Data/Vestigial.lua" part="program" sha1="9662791f2323ed5fb2f69f320df081ce73f83e4f" />
 	<File name="Data/Viscera.lua" part="program" sha1="2381f7a9e76a094f4890a0e8eb825df120a0ae6a" />
 	<File name="GameVersions.lua" part="program" sha1="a476a52da1bf25bbb6978bee2b92dd1d5a3047c4" />
-	<File name="Launch.lua" part="program" sha1="1603d2f94a3df516700ef6846e059fb83dcb615b" />
+	<File name="Launch.lua" part="program" sha1="1c8d7e690f8a1af9bca1519b6168c1479300883e" />
 	<File name="LaunchServer.lua" part="program" sha1="f15bdfbedaf887e19556490dce49b720f8365379" />
 	<File name="Modules/AddImplicitPopup.lua" part="program" sha1="f68d391d10b95c0feef70b7e8e82326a745dcb3b" />
 	<File name="Modules/Build.lua" part="program" sha1="774f0a13db949d2d3a4b4b2c7b9fb3eda2216b53" />
@@ -411,7 +411,7 @@
 	<File name="Modules/I18n.lua" part="program" sha1="7bef85cb6b5224672d4b64154de8f5f4a3c10879" />
 	<File name="Modules/ItemSlotHelper.lua" part="program" sha1="4b7d441f9ade5d57c413aa1f8f8067b654cfb927" />
 	<File name="Modules/ItemTools.lua" part="program" sha1="754bbbed69c10706aa403446433c3741e21c4556" />
-	<File name="Modules/Main.lua" part="program" sha1="453af1b40745f8d1928a56a0c76900257343eb18" />
+	<File name="Modules/Main.lua" part="program" sha1="bcf4cb49a4731c00147e98a0dda9c9b5087f6c26" />
 	<File name="Modules/ModParser.lua" part="program" sha1="d6e35f7cafe9fe61526dfcb8982d1d6d15a47077" />
 	<File name="Modules/ModTools.lua" part="program" sha1="c987491da4021b5bdc4744b5eec84fb5995284cf" />
 	<File name="Modules/PantheonTools.lua" part="program" sha1="ebe91a7d8f8444a6061acf4758da0e775cc8c314" />

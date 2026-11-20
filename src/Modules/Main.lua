@@ -86,8 +86,9 @@ function main:Init()
 	if not ignoreBuild then
 		self:SetMode("BUILD", false, "Unnamed build")
 	end
-	if launch.devMode or (GetScriptPath() == GetRuntimePath() and not launch.installedMode) then
-		-- If running in dev mode or standalone mode, put user data in the script path
+	if launch.portableMode or (GetScriptPath() == GetRuntimePath() and not launch.installedMode) then
+		-- Keeping builds and settings beside the scripts is portableMode's job;
+		-- it used to be implied by devMode, which also turned on developer UI.
 		self.userPath = GetScriptPath().."/"
 	else
 		local invalidPath, errMsg
@@ -296,9 +297,11 @@ function main:Init()
 	end
 	self.controls.versionLabel = new("LabelControl"):LabelControl({"BOTTOMLEFT",self.anchorMain,"BOTTOMLEFT"}, {148, -2, 0, 16}, "")
 	self.controls.versionLabel.label = function()
+		-- The branch is recorded in the manifest so update URLs resolve, but it
+		-- is not worth spelling out: the fork suffix already identifies the
+		-- build, and "(Dev)" reads as developer mode.
 		return "^8" .. (launch.versionBranch == "beta" and "Beta: " or "Version: ") .. launch.versionNumber
 			.. (launch.forkMode and FORK_VERSION_SUFFIX or "")
-			.. (launch.versionBranch == "dev" and " (Dev)" or "")
 	end
 	self.controls.devMode = new("LabelControl"):LabelControl({"BOTTOMLEFT",self.anchorMain,"BOTTOMLEFT"}, {0, -26, 0, 20}, colorCodes.NEGATIVE.."Dev Mode")
 	self.controls.devMode.shown = function()

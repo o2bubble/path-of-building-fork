@@ -63,10 +63,14 @@ end
 -- Built as a Lua pattern with captures, so the scan is one pass and cannot
 -- backtrack into catastrophic territory: every literal segment is escaped and
 -- the only wildcard is ".-", which never spans a newline.
-local function matchPlaceholders(key, text)
+-- A key compiles to one pattern, and the same key is retried against many
+-- drawn strings while a bucket is scanned, so compiling once here is the
+-- difference between ~0.2 ms and ~0.02 ms per candidate.
+local compiledPatterns = { }
+
+local function compileKey(key)
 	local pieces = { }
 	local last = 1
-	local idx = 0
 	while true do
 		local a, b = key:find("{", last, true)
 		if not a then break end
@@ -78,7 +82,6 @@ local function matchPlaceholders(key, text)
 		-- captured text is substituted verbatim.
 		pieces[#pieces + 1] = { slot = key:sub(b + 1, c - 1):match("^(%d+)") }
 		last = c + 1
-		idx = idx + 1
 	end
 	pieces[#pieces + 1] = { literal = key:sub(last) }
 
@@ -92,7 +95,16 @@ local function matchPlaceholders(key, text)
 			slots[#slots + 1] = p.slot
 		end
 	end
-	pattern = pattern .. "$"
+	return { pattern = pattern .. "$", slots = slots }
+end
+
+local function matchPlaceholders(key, text)
+	local c = compiledPatterns[key]
+	if not c then
+		c = compileKey(key)
+		compiledPatterns[key] = c
+	end
+	local pattern, slots = c.pattern, c.slots
 
 	local caps = { text:match(pattern) }
 	-- A failed match yields no captures, which is indistinguishable from a
@@ -642,6 +654,71 @@ function i18n.Load(dataDir, locale)
 		return
 	end
 
+	-- Index one template key under the discriminator the lookup can derive
+	-- from a drawn string. Keys are bucketed by (slot count, discriminator);
+	-- without an entry here a key is unreachable no matter how correct its
+	-- translation is.
+	local function indexTemplate(key)
+		local lead = key:match("^([^{]*)")
+		if not lead or not key:find("{", 1, true) then return end
+		local slots = 0
+		for _ in key:gmatch("{%d+[^}]*}") do slots = slots + 1 end
+		if slots == 0 then return end
+
+		-- The discriminator: two characters the lookup can derive from a drawn
+		-- string, either its opening literal or the one after its first value.
+		local first
+		if #lead >= 2 then
+			first = lead:sub(1, 2)
+		else
+			-- The literal prefix is too short to key on: "{0} points to node"
+			-- has none, and "+{0}% to Item Rarity" has only the sign. Use the
+			-- literal that follows the first placeholder instead — the lookup
+			-- derives that same literal from the number it consumed.
+			first = key:match("^[^{]-{%d+[^}]*}%s*(..)")
+				-- "{0}s" leaves a single character after the number.
+				or key:match("^[^{]-{%d+[^}]*}%s*(.)$")
+		end
+		if not first or #first == 0 then return end
+
+		-- Each placeholder is drawn as a value, so a drawn string carries one
+		-- number per placeholder PLUS whatever numbers the key spells out
+		-- itself ("... per 5% Map Quality"). Index under every count the drawn
+		-- form can have or the bucket lookup misses the key entirely.
+		-- matchPlaceholders still verifies the literals, so a wider index
+		-- cannot produce a wrong match.
+		local rest = key:gsub("{%d+[^}]*}", "")
+		local literalNumbers = 0
+		for _ in rest:gmatch("%d+%.?%d*") do literalNumbers = literalNumbers + 1 end
+
+		-- Second discriminator: the four characters after the first
+		-- placeholder. The first bucket still holds ~140 keys on average, and
+		-- a miss pays for a full pattern match on every one of them (~31 ms a
+		-- call). This splits that bucket by the text that follows the value.
+		local _, phEnd = key:find("{%d+[^}]*}")
+		local second = phEnd and key:sub(phEnd + 1, phEnd + 4) or nil
+		if second == "" then second = nil end
+
+		for n = slots, slots + literalNumbers do
+			local bucket = i18n.templates[n]
+			if not bucket then bucket = { } i18n.templates[n] = bucket end
+			local group = bucket[first]
+			if not group then group = { all = { }, free = { }, sub = { } } bucket[first] = group end
+			t_insert(group.all, key)
+			-- The two lists are disjoint: a key is in `sub` when its tail can
+			-- be derived from the drawn string, and in `free` when it cannot.
+			-- Scanning both on a miss would cost more than the single list it
+			-- replaces, so a key must never appear in both.
+			if second then
+				local sub = group.sub[second]
+				if not sub then sub = { } group.sub[second] = sub end
+				t_insert(sub, key)
+			else
+				t_insert(group.free, key)
+			end
+		end
+	end
+
 	local total = 0
 	for _, file in ipairs(meta.load_order) do
 		local path = dataDir .. "/" .. locale .. "/" .. file
@@ -670,29 +747,12 @@ function i18n.Load(dataDir, locale)
 						if i18n.lower[low] == nil then i18n.lower[low] = v end
 						local lowTrimmed = trimmed:lower()
 						if i18n.lower[lowTrimmed] == nil then i18n.lower[lowTrimmed] = v end
-						-- Index templates by (slot count, leading literal) so a
-						-- lookup narrows to a handful of candidates instead of
-						-- scanning tens of thousands of keys per drawn string.
-						local lead = k:match("^([^{]*)")
-						if lead and k:find("{", 1, true) then
-							local slots = 0
-							for _ in k:gmatch("{%d+[^}]*}") do slots = slots + 1 end
-							if slots > 0 then
-								local bucket = i18n.templates[slots]
-								if not bucket then bucket = { } i18n.templates[slots] = bucket end
-								-- A template that opens with a placeholder has no
-								-- literal prefix to index by; key it on the literal
-								-- that follows, which the lookup can derive from the
-								-- number it just consumed ("15 points to node" ->
-								-- "po", same as "{0} points to node").
-								local first = (#lead >= 2 and lead:sub(1, 2))
-									or k:match("^{%d+[^}]*}%s*(..)")
-								if first and #first > 0 then
-									bucket[first] = bucket[first] or { }
-									t_insert(bucket[first], k)
-								end
-							end
-						end
+						indexTemplate(k)
+						-- A key copied from a Lua long-bracket literal often
+						-- carries padding the drawn string does not. The trimmed
+						-- form is registered in `entries` above, so it has to be
+						-- indexed too or it can only be found by exact match.
+						if trimmed ~= k then indexTemplate(trimmed) end
 						total = total + 1
 					end
 				end
@@ -746,17 +806,64 @@ function i18n.Translate(text)
 		local slots = select(2, text:gsub("%-?%d+%.?%d*", ""))
 		local bucket = i18n.templates[slots]
 		if bucket then
-			-- Literal-prefix templates ("Grants {0}% ...") and leading-placeholder
-			-- templates ("{0} points to node") live in different buckets.
-			local head = text:sub(1, 2)
-			-- A leading "+" is common ("%+g" formats signed mods that way) and
-			-- must count as part of the number, or the literal that follows it
-			-- cannot be derived and the lookup never reaches the right bucket.
-			local afterNumber = text:match("^[%+%-]?%d+%.?%d*%s*(..)")
-			for _, which in ipairs(afterNumber and { head, afterNumber } or { head }) do
-				local keys = bucket[which]
-				if keys then
-					for _, key in ipairs(keys) do
+			-- Literal-prefix templates ("Grants {0}% ...") and
+			-- leading-placeholder templates ("{0} points to node") live in
+			-- different buckets.
+			local candidates = { text:sub(1, 2) }
+			-- A sign belongs to the number ("%+g" formats signed mods that
+			-- way). Search anywhere rather than anchored: a drawn string can
+			-- open with punctuation before its first value — "(15 unread ..."
+			-- is keyed as "({0} unread ...".
+			local afterNumber = text:match("[%+%-]?%d+%.?%d*%s*(..)")
+			if afterNumber then
+				candidates[#candidates + 1] = afterNumber
+			else
+				-- "{0}s" leaves a single character after the number.
+				candidates[#candidates + 1] = text:match("[%+%-]?%d+%.?%d*%s*(.)$")
+			end
+			-- The four characters after a value, matching the second
+			-- discriminator the keys were indexed under. Every number is
+			-- tried: a key can spell out a literal number before its first
+			-- placeholder ("With at least 40 Intelligence ... has {0}%"), and
+			-- only the position of the real value yields the indexed tail.
+			local tailKeys = { }
+			local from = 1
+			while true do
+				local _, numEnd = text:find("[%+%-]?%d+%.?%d*", from)
+				if not numEnd then break end
+				tailKeys[#tailKeys + 1] = text:sub(numEnd + 1, numEnd + 4)
+				from = numEnd + 1
+			end
+
+			for _, which in ipairs(candidates) do
+				local group = bucket[which]
+				if group then
+					for _, tailKey in ipairs(tailKeys) do
+						local sub = group.sub[tailKey]
+						if sub then
+							for _, key in ipairs(sub) do
+								local values = matchPlaceholders(key, text)
+								if values then
+									return fillPlaceholders(i18n.entries[key], values)
+								end
+							end
+						end
+					end
+					-- Keys with no derivable tail: nothing follows their first
+					-- placeholder, so the drawn string cannot be narrowed either.
+					for _, key in ipairs(group.free) do
+						local values = matchPlaceholders(key, text)
+						if values then
+							return fillPlaceholders(i18n.entries[key], values)
+						end
+					end
+					-- Last resort. A key's tail is derived from where its first
+					-- placeholder sits; when the drawn string puts a number
+					-- somewhere the key does not, the narrowing above picks the
+					-- wrong slot and only a full scan finds the key. Only misses
+					-- reach here, so the cost is paid where there is no answer
+					-- to be had quickly.
+					for _, key in ipairs(group.all) do
 						local values = matchPlaceholders(key, text)
 						if values then
 							return fillPlaceholders(i18n.entries[key], values)

@@ -45,12 +45,18 @@ def _alphanumeric(key: str) -> list[int | str]:
     ]
 
 
-# raw.githubusercontent.com stalls at a few KB/s here and sometimes hangs with
-# the connection open, which makes a thousand-file update impossible. jsDelivr
-# serves the same repository through a CDN and is fast and reachable; its
-# caching is the price, and the updater compares SHA1s so a stale edge can
-# only make it re-download files it already has, never keep older ones.
+# Two hosts, chosen per part:
+#
+#   the payload (runtime, program, tree) is a thousand-odd files, and
+#   raw.githubusercontent.com stalls at a few KB/s here and sometimes holds
+#   the connection open with no data, which makes such an update impossible.
+#   jsDelivr serves the same repository through a CDN and is fast.
+#
+#   the manifest itself must never come from a cache -- the client reads it to
+#   learn where the files are, so a stale copy delays every release by the
+#   CDN's TTL. It is 160 KB, which raw can deliver even when slow.
 DEFAULT_BASE_URL = "https://cdn.jsdelivr.net/gh/o2bubble/path-of-building-fork@{branch}/"
+MANIFEST_BASE_URL = "https://raw.githubusercontent.com/o2bubble/path-of-building-fork/{branch}/"
 DEFAULT_BRANCH = "dev"
 
 
@@ -58,6 +64,7 @@ def create_manifest(
     version: str | None = None,
     replace: bool = False,
     base_url: str = DEFAULT_BASE_URL,
+    manifest_base_url: str = MANIFEST_BASE_URL,
     branch: str = DEFAULT_BRANCH,
 ) -> None:
     """Generate new SHA1 hashes and version number for Path of Building's manifest file.
@@ -94,7 +101,10 @@ def create_manifest(
 
     parts: list[dict[str, str]] = []
     for part in config.sections():
-        url = base_url + config[part]["path"]
+        # "default" is where the client fetches manifest.xml and changelog.txt
+        # from; the rest carry the update payload. See MANIFEST_BASE_URL.
+        host = manifest_base_url if part == "default" else base_url
+        url = host + config[part]["path"]
         url_with_trailing_slash = url if url.endswith("/") else url + "/"
         attributes = (
             {"part": part, "platform": "win32", "url": url_with_trailing_slash}
@@ -183,8 +193,14 @@ def cli() -> None:
     parser.add_argument(
         "--base-url",
         action="store",
-        help=f"Download root, with {{branch}} placeholder (default: {DEFAULT_BASE_URL})",
+        help=f"Payload download root, with {{branch}} placeholder (default: {DEFAULT_BASE_URL})",
         default=DEFAULT_BASE_URL,
+    )
+    parser.add_argument(
+        "--manifest-base-url",
+        action="store",
+        help=f"Where the client fetches manifest.xml from (default: {MANIFEST_BASE_URL})",
+        default=MANIFEST_BASE_URL,
     )
     parser.add_argument(
         "--branch",
@@ -197,7 +213,8 @@ def cli() -> None:
         logging.basicConfig(level=logging.INFO)
     elif args.quiet:
         logging.basicConfig(level=logging.CRITICAL + 1)
-    create_manifest(args.set_version or None, args.in_place, args.base_url, args.branch)
+    create_manifest(args.set_version or None, args.in_place, args.base_url,
+                    args.manifest_base_url, args.branch)
 
 
 if __name__ == "__main__":

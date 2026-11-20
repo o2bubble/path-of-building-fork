@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <PoBVersion>
 	<Version number="2.68.1" platform="win32" branch="dev" />
-	<Source part="default" url="https://cdn.jsdelivr.net/gh/o2bubble/path-of-building-fork@{branch}/" />
+	<Source part="default" url="https://raw.githubusercontent.com/o2bubble/path-of-building-fork/{branch}/" />
 	<Source part="runtime" platform="win32" url="https://cdn.jsdelivr.net/gh/o2bubble/path-of-building-fork@{branch}/runtime/" />
 	<Source part="program" url="https://cdn.jsdelivr.net/gh/o2bubble/path-of-building-fork@{branch}/src/" />
 	<Source part="tree" url="https://cdn.jsdelivr.net/gh/o2bubble/path-of-building-fork@{branch}/src/" />

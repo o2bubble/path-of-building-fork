@@ -140,7 +140,12 @@ function main:Init()
 	-- so applying one cannot pull in the untranslated original. On by default:
 	-- this fork ships as a package, and an update is how a user gets the next
 	-- one without hunting for the download.
+	--
+	-- launch starts with updates disabled; the saved preference overrides this
+	-- in LoadSettings, but a fresh install has no settings file, so the default
+	-- has to be applied to the flag here as well or nothing turns it on.
 	self.programAutoUpdate = true
+	launch.updatesDisabled = false
 
 	if not SetDPIScaleOverridePercent then SetDPIScaleOverridePercent = function(scale) end end
 

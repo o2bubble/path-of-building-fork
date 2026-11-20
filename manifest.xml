@@ -411,7 +411,7 @@
 	<File name="Modules/I18n.lua" part="program" sha1="fd3ec30fa9383f06db917e054502975ff51469f8" />
 	<File name="Modules/ItemSlotHelper.lua" part="program" sha1="4b7d441f9ade5d57c413aa1f8f8067b654cfb927" />
 	<File name="Modules/ItemTools.lua" part="program" sha1="754bbbed69c10706aa403446433c3741e21c4556" />
-	<File name="Modules/Main.lua" part="program" sha1="9d751aa48b7119faf78232393cf2de6558c65920" />
+	<File name="Modules/Main.lua" part="program" sha1="39d791c8e938d91b4bfc2409894696fc2d155b7e" />
 	<File name="Modules/ModParser.lua" part="program" sha1="4ab89c50fdfe57bb5a130378d55a2d9306b1d2ab" />
 	<File name="Modules/ModTools.lua" part="program" sha1="c987491da4021b5bdc4744b5eec84fb5995284cf" />
 	<File name="Modules/PantheonTools.lua" part="program" sha1="ebe91a7d8f8444a6061acf4758da0e775cc8c314" />

@@ -548,7 +548,38 @@ function i18n.NormaliseRepoUrl(url)
 		repo = repo:gsub("%.git$", "")
 		return "https://raw.githubusercontent.com/" .. owner .. "/" .. repo .. "/HEAD"
 	end
+	-- Gitee serves a repository's files under /raw/<ref>; its host has no
+	-- raw.githubusercontent equivalent that also carries the owner.
+	local gowner, grepo = url:match("^https?://gitee%.com/([^/]+)/([^/#?]+)")
+	if gowner then
+		grepo = grepo:gsub("%.git$", "")
+		-- A URL that already names a ref (".../raw/master") is used as is.
+		if url:find("/raw/", 1, true) then return url end
+		return "https://gitee.com/" .. gowner .. "/" .. grepo .. "/raw/HEAD"
+	end
 	return url
+end
+
+-- Defaults for a caller that has not applied a saved setting yet; Main.lua
+-- overrides both from Settings.xml.
+i18n.repoUrl = i18n.repoUrl or "https://cdn.jsdelivr.net/gh/o2bubble/path-of-building-i18n@HEAD"
+i18n.repoMirror = i18n.repoMirror or "https://github.com/o2bubble/path-of-building-i18n"
+
+-- The bases to try, in order: the configured repository, then its mirror.
+-- Mirrors exist because one host can be slow or unreachable where the user
+-- is; the content is the same and every file is verified against the SHA1 in
+-- the manifest, so trying the second is safe even if the first is only
+-- partially reachable.
+function i18n.RepoBases()
+	local bases, seen = { }, { }
+	for _, url in ipairs({ i18n.repoUrl, i18n.repoMirror }) do
+		local base = i18n.NormaliseRepoUrl(url)
+		if base and not seen[base] then
+			seen[base] = true
+			bases[#bases + 1] = base
+		end
+	end
+	return bases
 end
 
 local function sha1Of(path)
@@ -621,8 +652,8 @@ end
 function i18n.CheckForUpdates(onProgress, onDone)
 	onDone = onDone or function() end
 	onProgress = onProgress or function() end
-	local base = i18n.NormaliseRepoUrl(i18n.repoUrl)
-	if not base then
+	local bases = i18n.RepoBases()
+	if #bases == 0 then
 		onDone({ error = "No translation repository is configured." })
 		return
 	end
@@ -634,17 +665,52 @@ function i18n.CheckForUpdates(onProgress, onDone)
 		onDone({ error = msg })
 	end
 	onProgress("Checking for updates...")
-	launch:DownloadPage(base .. "/manifest.json", function(response, errMsg)
-		if errMsg then
-			fail(i18n.Fill("Could not reach the repository ({0})", errMsg))
+
+	-- Ask every base for its manifest and use the newest one. A CDN in front
+	-- of the repository can answer from a cache that predates the last push,
+	-- and the client would then report "up to date" while newer files exist;
+	-- the manifest is a kilobyte, so asking both costs one extra request.
+	local gathered = { }
+	local which = 0
+	local lastError
+	local afterManifest
+	local function collectManifest()
+		which = which + 1
+		local base = bases[which]
+		if not base then
+			if #gathered == 0 then
+				fail(i18n.Fill("Could not reach the repository ({0})", lastError or "no mirror answered"))
+				return
+			end
+			local best = gathered[1]
+			for i = 2, #gathered do
+				if gathered[i].generated > best.generated then best = gathered[i] end
+			end
+			afterManifest(best.remote, best.body, best.base)
 			return
 		end
-		local dkjson = require("dkjson")
-		local ok, remote = pcall(dkjson.decode, response.body, 1, nil)
-		if not ok or type(remote) ~= "table" or type(remote.locales) ~= "table" then
-			fail("The repository manifest is not valid JSON.")
-			return
-		end
+		launch:DownloadPage(base .. "/manifest.json", function(response, errMsg)
+			if errMsg then
+				lastError = errMsg
+			else
+				local dkjson = require("dkjson")
+				local ok, remote = pcall(dkjson.decode, response.body, 1, nil)
+				if ok and type(remote) == "table" and type(remote.locales) == "table" then
+					t_insert(gathered, {
+						base = base,
+						remote = remote,
+						body = response.body,
+						generated = tonumber(remote.generated) or 0,
+					})
+				else
+					lastError = base .. ": the manifest is not valid JSON"
+				end
+			end
+			collectManifest()
+		end)
+	end
+
+	afterManifest = function(remote, manifestBody)
 		local queue = { }
 		local unchanged = 0
 		for _, locale in ipairs(syncTargets(remote)) do
@@ -668,6 +734,10 @@ function i18n.CheckForUpdates(onProgress, onDone)
 
 		-- One file at a time: the download helper runs each request in its own
 		-- subscript, and firing dozens at once would spawn that many Lua states.
+		-- Files are tried from the configured order, not the host that supplied
+		-- the newest manifest: a CDN's edges disagree with each other, so the
+		-- fast one is worth trying first every time, and the SHA1 below is what
+		-- decides whether a body is the file the manifest describes.
 		local index = 0
 		local downloaded = 0
 		local function nextFile()
@@ -678,7 +748,7 @@ function i18n.CheckForUpdates(onProgress, onDone)
 				-- diff both agree with the files on disk.
 				local f = io.open(i18n.baseDir .. "/manifest.json", "wb")
 				if f then
-					f:write(response.body)
+					f:write(manifestBody)
 					f:close()
 				end
 				local current = i18n.lang
@@ -689,22 +759,44 @@ function i18n.CheckForUpdates(onProgress, onDone)
 			end
 			onProgress(i18n.Fill("Downloading {0} ({1}/{2})...", item.name, index, #queue))
 			MakeDir(i18n.baseDir .. "/" .. item.locale)
-			launch:DownloadPage(base .. "/" .. item.locale .. "/" .. item.name, function(fileResponse, fileErr)
-				if fileErr then
-					fail(i18n.Fill("Could not download {0} ({1})", item.name, fileErr))
+
+			-- The host that answered the manifest may still fail on a file
+			-- (a dropped connection, a 5xx); the mirror carries the same
+			-- bytes, and the SHA1 check below is what admits them either way.
+			local attempt = 0
+			local function tryFile()
+				attempt = attempt + 1
+				local host = bases[attempt]
+				if not host then
+					fail(i18n.Fill("Could not download {0} ({1})", item.name, lastError or "no mirror answered"))
 					return
 				end
-				local written, writeErr = writeFileAtomic(item.path, fileResponse.body)
-				if not written then
-					fail(i18n.Fill("Could not save {0} ({1})", item.name, writeErr))
-					return
-				end
-				downloaded = downloaded + 1
-				nextFile()
-			end)
+				launch:DownloadPage(host .. "/" .. item.locale .. "/" .. item.name, function(fileResponse, fileErr)
+					if fileErr then
+						lastError = item.name .. ": " .. fileErr
+						tryFile()
+						return
+					end
+					if type(fileResponse.body) ~= "string"
+						or require("sha1")(fileResponse.body) ~= item.sha then
+						lastError = item.name .. ": the mirror served a file the manifest does not describe"
+						tryFile()
+						return
+					end
+					local written, writeErr = writeFileAtomic(item.path, fileResponse.body)
+					if not written then
+						fail(i18n.Fill("Could not save {0} ({1})", item.name, writeErr))
+						return
+					end
+					downloaded = downloaded + 1
+					nextFile()
+				end)
+			end
+			tryFile()
 		end
 		nextFile()
-	end)
+	end
+	collectManifest()
 end
 
 -- Answers computed from the dictionary, keyed by the drawn string. Declared

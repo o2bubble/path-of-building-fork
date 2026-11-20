@@ -128,9 +128,13 @@ function main:Init()
 	-- Which dictionary the UI draws with. Launch already picked one from the
 	-- manifest; LoadSettings may override it with the saved preference.
 	self.language = POB_I18N and POB_I18N.lang or "en"
-	-- Where translation updates come from. The default is the upstream
-	-- dictionary repository; pointing it elsewhere is all a mirror needs.
-	self.i18nRepo = "https://github.com/o2bubble/path-of-building-i18n"
+	-- Where translation updates come from. jsDelivr serves the GitHub
+	-- repository through a CDN, which is what makes it reachable and fast
+	-- where GitHub itself crawls; the repository's own raw host is the second
+	-- source. Both carry the same bytes and every file is verified against the
+	-- SHA1 in the manifest, so either can answer.
+	self.i18nRepo = "https://cdn.jsdelivr.net/gh/o2bubble/path-of-building-i18n@HEAD"
+	self.i18nRepoMirror = "https://github.com/o2bubble/path-of-building-i18n"
 	self.i18nAutoUpdate = true
 	-- Program updates resolve against this fork's manifest, never upstream's,
 	-- so applying one cannot overwrite the localized build. Off by default: an
@@ -728,6 +732,9 @@ function main:LoadSettings(ignoreBuild)
 				if node.attrib.i18nRepo then
 					self.i18nRepo = node.attrib.i18nRepo
 				end
+				if node.attrib.i18nRepoMirror then
+					self.i18nRepoMirror = node.attrib.i18nRepoMirror
+				end
 				if node.attrib.i18nAutoUpdate then
 					self.i18nAutoUpdate = node.attrib.i18nAutoUpdate == "true"
 				end
@@ -740,6 +747,7 @@ function main:LoadSettings(ignoreBuild)
 				launch.updatesDisabled = not self.programAutoUpdate
 				if POB_I18N then
 					POB_I18N.repoUrl = self.i18nRepo
+					POB_I18N.repoMirror = self.i18nRepoMirror
 				end
 			end
 		end
@@ -876,6 +884,7 @@ function main:SaveSettings()
 		dpiScaleOverridePercent = tostring(self.dpiScaleOverridePercent),
 		language = self.language,
 		i18nRepo = self.i18nRepo,
+		i18nRepoMirror = self.i18nRepoMirror,
 		i18nAutoUpdate = tostring(self.i18nAutoUpdate),
 		programAutoUpdate = tostring(self.programAutoUpdate),
 	} })
@@ -966,6 +975,7 @@ function main:OpenOptionsPopup(savedState)
 		dpiScaleOverridePercent = self.dpiScaleOverridePercent,
 		language = self.language,
 		i18nRepo = self.i18nRepo,
+		i18nRepoMirror = self.i18nRepoMirror,
 		i18nAutoUpdate = self.i18nAutoUpdate,
 		programAutoUpdate = self.programAutoUpdate
 	}
@@ -1034,11 +1044,20 @@ function main:OpenOptionsPopup(savedState)
 		controls.i18nRepo = new("EditControl"):EditControl({ "TOPLEFT", controls.sectionAnchor, "TOPLEFT" }, { currentX + defaultLabelPlacementX, currentY, 290, 18 })
 		controls.i18nRepo:SetText(self.i18nRepo or "")
 		controls.i18nRepoLabel = new("LabelControl"):LabelControl({ "RIGHT", controls.i18nRepo, "LEFT" }, { defaultLabelSpacingPx, 0, 0, 16 }, "^7Translation repository:")
-		controls.i18nRepo.tooltipText = "Base URL of a translation repository.\nA GitHub repo page or a raw-content base both work."
+		controls.i18nRepo.tooltipText = "Base URL of a translation repository.\nA GitHub or Gitee repo page or a raw-content base both work."
 		nextRow()
-		controls.i18nCheck = new("ButtonControl"):ButtonControl({ "TOPLEFT", controls.sectionAnchor, "TOPLEFT" }, { currentX + defaultLabelPlacementX, currentY, 110, 18 }, "Check now", function()
+		-- The mirror shares this row with the check button: the popup is sized
+		-- from the number of rows it holds, and one more row pushed it past the
+		-- bottom of the screen.
+		controls.i18nRepoMirror = new("EditControl"):EditControl({ "TOPLEFT", controls.sectionAnchor, "TOPLEFT" }, { currentX + defaultLabelPlacementX, currentY, 118, 18 })
+		controls.i18nRepoMirror:SetText(self.i18nRepoMirror or "")
+		controls.i18nRepoMirrorLabel = new("LabelControl"):LabelControl({ "RIGHT", controls.i18nRepoMirror, "LEFT" }, { defaultLabelSpacingPx, 0, 0, 16 }, "^7Backup:")
+		controls.i18nRepoMirror.tooltipText = "Tried when the repository above cannot be reached.\nLeave blank to use only one host."
+		controls.i18nCheck = new("ButtonControl"):ButtonControl({ "LEFT", controls.i18nRepoMirror, "RIGHT" }, { 6, 0, 88, 18 }, "Check now", function()
 			self.i18nRepo = controls.i18nRepo.buf
+			self.i18nRepoMirror = controls.i18nRepoMirror.buf
 			POB_I18N.repoUrl = self.i18nRepo
+			POB_I18N.repoMirror = self.i18nRepoMirror
 			self.i18nCheckRunning = true
 			POB_I18N.CheckForUpdates(function(status)
 				self.i18nStatus = status
@@ -1408,6 +1427,10 @@ function main:OpenOptionsPopup(savedState)
 		if savedState.i18nRepo then
 			self.i18nRepo = savedState.i18nRepo
 			POB_I18N.repoUrl = self.i18nRepo
+		end
+		if savedState.i18nRepoMirror ~= nil then
+			self.i18nRepoMirror = savedState.i18nRepoMirror
+			POB_I18N.repoMirror = self.i18nRepoMirror
 		end
 		if savedState.i18nAutoUpdate ~= nil then
 			self.i18nAutoUpdate = savedState.i18nAutoUpdate

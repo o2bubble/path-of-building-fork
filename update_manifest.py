@@ -45,7 +45,12 @@ def _alphanumeric(key: str) -> list[int | str]:
     ]
 
 
-DEFAULT_BASE_URL = "https://raw.githubusercontent.com/o2bubble/path-of-building-fork/{branch}/"
+# raw.githubusercontent.com stalls at a few KB/s here and sometimes hangs with
+# the connection open, which makes a thousand-file update impossible. jsDelivr
+# serves the same repository through a CDN and is fast and reachable; its
+# caching is the price, and the updater compares SHA1s so a stale edge can
+# only make it re-download files it already has, never keep older ones.
+DEFAULT_BASE_URL = "https://cdn.jsdelivr.net/gh/o2bubble/path-of-building-fork@{branch}/"
 DEFAULT_BRANCH = "dev"
 
 

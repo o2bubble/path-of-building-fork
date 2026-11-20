@@ -9,6 +9,8 @@ local t_insert = table.insert
 local t_remove = table.remove
 local m_min = math.min
 local m_max = math.max
+local m_concat = table.concat
+local utf8 = require("lua-utf8")
 
 local groupSlotDropList = {
 	{ label = "None" },
@@ -962,7 +964,10 @@ function SkillsTabClass:CreateGemSlot(index)
 			slot.quality:SetText(gemInstance.quality)
 			slot.count:SetText(gemInstance.count)
 		end
-		if not gemInstance.gemData.vaalGem then
+		-- A slot can hold an instance the tab could not resolve to a gem (an
+		-- imported build naming a gem this version does not have); toggling it
+		-- must not take the whole tab down.
+		if not gemInstance.gemData or not gemInstance.gemData.vaalGem then
 			slot.enableGlobal1.state = true
 			gemInstance.enableGlobal1 = true
 			slot.enableGlobal2.state = true
@@ -1109,6 +1114,92 @@ function SkillsTabClass:FindImbuedSupport(name)
 	return gem and gem.grantedEffect and gem.grantedEffect.support and gem or nil
 end
 
+-- A build written by another tool can name its gems in the client's
+-- language, and everything below knows only English names. Translate back
+-- first; when the exporter's wording differs from the dictionary's
+-- ("几率流血（辅）" where the client says "流血几率（辅）"), compare the
+-- characters instead, since a gem's name is short and distinctive enough
+-- that the same set of them identifies one gem.
+local function nameCharacters(s)
+	local codes = { }
+	for _, code in utf8.codes(s) do
+		if code > 127 then codes[#codes + 1] = code end
+	end
+	if #codes == 0 then return nil end
+	table.sort(codes)
+	return m_concat(codes, ",")
+end
+
+local function withoutSupportMarker(s)
+	return (s:gsub("%s*[（(]辅[）)]$", ""):gsub("%s*[（(]强辅[）)]$", ""):gsub("%s*辅助$", ""))
+end
+
+-- The English names that could stand for a drawn gem name, most likely
+-- first. A support gem's name is ambiguous: "附加火焰伤害（辅）" reverses to
+-- both "Added Fire Damage" and "Added Fire Damage Support", and the two are
+-- different gems, so the support spelling leads when the drawn name carries
+-- a support marker. An English name is its own only candidate.
+function SkillsTabClass:GemNameCandidates(nameSpec)
+	if not POB_I18N or not nameSpec:find("[\128-\255]") then
+		return { nameSpec }
+	end
+	local candidates, seen = { }, { }
+	local function add(name)
+		if name and name ~= "" and not seen[name] then
+			seen[name] = true
+			candidates[#candidates + 1] = name
+		end
+	end
+
+	local isGemName = { }
+	for _, gemData in pairs(self.build.data.gems) do
+		isGemName[gemData.name] = true
+	end
+
+	local core = withoutSupportMarker(nameSpec)
+	local isSupport = core ~= nameSpec
+	local english = POB_I18N.ReverseTranslate(nameSpec)
+	if not english and isSupport then
+		english = POB_I18N.ReverseTranslate(core)
+	end
+
+	local byCharacters
+	local wanted = nameCharacters(core)
+	if wanted then
+		for _, gemData in pairs(self.build.data.gems) do
+			local zh = POB_I18N.Translate(gemData.name)
+			if zh and zh ~= gemData.name and nameCharacters(withoutSupportMarker(zh)) == wanted then
+				byCharacters = gemData.name
+				break
+			end
+		end
+	end
+
+	-- The gem list decides between the two spellings: nearly every gem's name
+	-- drops the word "Support", but "Barrage Support" keeps it, and the drawn
+	-- name's own support marker should decide when both spellings are gems.
+	local function addWithSpelling(name)
+		if not name then return end
+		local bare = name:match("^(.-)%s+Support$")
+		local spellings = bare and { name, bare } or { name, name .. " Support" }
+		local present = { }
+		for _, spelling in ipairs(spellings) do
+			if isGemName[spelling] then present[#present + 1] = spelling end
+		end
+		table.sort(present, function(a, b)
+			local aPreferred = (a:match("Support$") ~= nil) == isSupport
+			local bPreferred = (b:match("Support$") ~= nil) == isSupport
+			return aPreferred and not bPreferred
+		end)
+		for _, spelling in ipairs(present) do add(spelling) end
+		for _, spelling in ipairs(spellings) do add(spelling) end
+	end
+	addWithSpelling(english)
+	addWithSpelling(byCharacters)
+	add(nameSpec)
+	return candidates
+end
+
 -- Find the skill gem matching the given specification
 function SkillsTabClass:FindSkillGem(nameSpec)
 	-- Search for gem name using increasingly broad search patterns
@@ -1203,7 +1294,12 @@ function SkillsTabClass:ProcessSocketGroup(socketGroup)
 		elseif gemInstance.nameSpec:match("%S") then
 			-- Specified by gem/skill name, try to match it
 			-- Used to migrate pre-1.4.20 builds
-			gemInstance.errMsg, gemInstance.gemData = self:FindSkillGem(gemInstance.nameSpec)
+			local errMsg
+			for _, candidate in ipairs(self:GemNameCandidates(gemInstance.nameSpec)) do
+				errMsg, gemInstance.gemData = self:FindSkillGem(candidate)
+				if gemInstance.gemData then break end
+			end
+			gemInstance.errMsg = gemInstance.gemData and nil or errMsg
 			gemInstance.gemId = gemInstance.gemData and gemInstance.gemData.id
 			gemInstance.skillId = gemInstance.gemData and gemInstance.gemData.grantedEffectId
 			if gemInstance.gemData then

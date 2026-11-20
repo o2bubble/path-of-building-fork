@@ -1065,6 +1065,8 @@ function main:OpenOptionsPopup(savedState)
 				self.i18nCheckRunning = false
 				if result.error then
 					self.i18nStatus = "^1" .. result.error
+				elseif result.stale then
+					self.i18nStatus = "^2The installed dictionary is newer than the mirror."
 				elseif result.updated then
 					self.i18nStatus = "^2" .. POB_I18N.Fill("Updated {0} of {1} file(s).", result.downloaded, result.total)
 				else

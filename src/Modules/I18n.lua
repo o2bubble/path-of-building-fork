@@ -666,6 +666,23 @@ function i18n.CheckForUpdates(onProgress, onDone)
 	end
 	onProgress("Checking for updates...")
 
+	-- What is installed, so a stale mirror cannot replace it with something
+	-- older. A directory without a manifest (or one written before the stamp
+	-- existed) counts as generation zero: anything may replace it.
+	local installedGeneration = 0
+	do
+		local f = io.open(i18n.baseDir .. "/manifest.json", "rb")
+		if f then
+			local text = f:read("*a")
+			f:close()
+			local dkjson = require("dkjson")
+			local ok, doc = pcall(dkjson.decode, text, 1, nil)
+			if ok and type(doc) == "table" then
+				installedGeneration = tonumber(doc.generated) or 0
+			end
+		end
+	end
+
 	-- Ask every base for its manifest and use the newest one. A CDN in front
 	-- of the repository can answer from a cache that predates the last push,
 	-- and the client would then report "up to date" while newer files exist;
@@ -685,6 +702,15 @@ function i18n.CheckForUpdates(onProgress, onDone)
 			local best = gathered[1]
 			for i = 2, #gathered do
 				if gathered[i].generated > best.generated then best = gathered[i] end
+			end
+			-- Never move backwards. A mirror can answer with a copy older than
+			-- what is already installed -- a CDN edge that has not caught up,
+			-- or a release that was rolled back -- and taking it would replace
+			-- newer dictionary files with older ones and rewrite the installed
+			-- manifest to match. The installed copy is the floor.
+			if best.generated < installedGeneration then
+				onDone({ updated = false, unchanged = 0, total = 0, stale = true })
+				return
 			end
 			afterManifest(best.remote, best.body, best.base)
 			return

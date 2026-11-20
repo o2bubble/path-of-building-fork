@@ -225,6 +225,13 @@ function ListClass:Draw(viewPort, noTooltip)
 			local lineY = rowHeight * (index - 1) - scrollOffsetV + (self.colLabels and 18 or 0)
 			local value = list[index]
 			local text = self:GetRowValue(colIndex, index, value)
+			-- Translate before measuring: the row is clipped a few lines down,
+			-- and a clipped English label ("Flesh and Stone, Tempest ...") no
+			-- longer matches a dictionary entry, so the row would stay English
+			-- even though every name in it has a translation.
+			if POB_I18N and text then
+				text = POB_I18N.TranslateColoured(text)
+			end
 			local icon = nil
 			if self.GetRowIcon then 
 				icon = self:GetRowIcon(colIndex, index, value)

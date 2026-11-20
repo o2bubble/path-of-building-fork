@@ -833,6 +833,34 @@ local function probeExact(text)
 	return i18n.entries[text .. ":"]
 end
 
+-- Translate a comma-joined list ("Flesh and Stone, Tempest Shield"), the way
+-- the socket group label is built from its gems. Returns nil unless every
+-- part is a known entry: a half-translated list reads worse than an English
+-- one, and a wrong split would mangle names that contain a comma.
+function i18n.TranslateList(text)
+	if not i18n.loaded or type(text) ~= "string" or not text:find(", ", 1, true) then
+		return nil
+	end
+	local parts, out = { }, { }
+	local from = 1
+	while true do
+		local a, b = text:find(", ", from, true)
+		parts[#parts + 1] = text:sub(from, (a and a - 1) or #text)
+		if not a then break end
+		from = b + 1
+	end
+	for i, part in ipairs(parts) do
+		-- The label often ends with a space before the colour-coded socket
+		-- string that follows it ("Rallying Cry ^7R-R-R-R"). Trim it for the
+		-- lookup, then put it back so the socket letters keep their spacing.
+		local lead, body, trail = part:match("^(%s*)(.-)(%s*)$")
+		local hit = probeExact(body)
+		if not hit then return nil end
+		out[i] = lead .. hit .. trail
+	end
+	return table.concat(out, "、")
+end
+
 -- Translate one drawn string. Returns the input unchanged when there is no
 -- exact hit, which is the common case for runtime-built text.
 function i18n.Translate(text)
@@ -840,6 +868,18 @@ function i18n.Translate(text)
 
 	local direct = probeExact(text)
 	if direct then return direct end
+
+	-- Drawn text often carries a space the dictionary key does not, because
+	-- the next piece is concatenated on ("Autoexertion " .. "^7" .. level).
+	-- Retry the trimmed form through the full lookup, not just the exact one,
+	-- so a template with a leading literal ("13% increased maximum Energy
+	-- Shield") is still reachable. The recursive call cannot loop: the body
+	-- has no surrounding whitespace, so the condition below is false there.
+	local lead, body, trail = text:match("^(%s*)(.-)(%s*)$")
+	if body ~= text and body ~= "" then
+		local hit = i18n.Translate(body)
+		if hit ~= body then return lead .. hit .. trail end
+	end
 
 	-- Item text spells a roll range out ("+(20-30) to Strength") where the
 	-- dictionary keys the rolled form ("+20 to Strength"). Retry with the
@@ -968,6 +1008,46 @@ function i18n.Translate(text)
 			if head then return head .. text:sub(q) end
 		end
 	end
+
+	-- A whole string that is just "(Word)": the affix type the modifier list
+	-- appends. The dictionary keys the bare word.
+	if #text <= 60 then
+		local word = text:match("^%s*%((.+)%)%s*$")
+		if word then
+			local hit = probeExact(word)
+			if hit then return "(" .. hit .. ")" end
+		end
+	end
+
+	-- A "(Disabled)" / "(Active)" suffix on an otherwise unknown label. Only
+	-- the parenthesised tail is looked up, and only when it is a known entry,
+	-- so this cannot invent a translation for arbitrary trailing text.
+	if #text <= 160 then
+		local body, suffix = text:match("^(.-)(%s*%(.*%))$")
+		if body and #body > 0 then
+			-- The spacing is part of the key: the game writes " (Active)" with
+			-- a leading space, and the dictionary follows that.
+			local tail = probeExact(suffix) or probeExact(suffix:match("^%s*(.*)$"))
+			-- "(Prefix)" is the affix type spelled as a bare word in the
+			-- dictionary; wrap the translation back in the parentheses the
+			-- source drew.
+			if not tail then
+				local inner = suffix:match("^%s*%((.+)%)%s*$")
+				local word = inner and probeExact(inner)
+				if word then tail = "(" .. word .. ")" end
+			end
+			if tail then
+				local head = i18n.Translate(body)
+				if head ~= body then return head .. " " .. tail end
+			end
+		end
+	end
+
+	-- A socket group label is its gems joined with ", " ("Flesh and Stone,
+	-- Tempest Shield, ..."). Each gem has an entry; the joined string does
+	-- not, so translate the parts and join them with a Chinese separator.
+	local listed = i18n.TranslateList(text)
+	if listed then return listed end
 	return text
 end
 

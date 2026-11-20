@@ -7,6 +7,25 @@ local function fuzzyScore(modText, searchStr, words)
 	if modLower:find(searchStr, 1, true) then
 		return 1
 	end
+	-- The list draws Chinese, so a Chinese query has to match the translation.
+	-- Only exact substrings here: the fuzzy tier below splits the query at
+	-- Latin word starts, which means nothing inside a Chinese string.
+	local zh = POB_I18N and POB_I18N.TranslatedName(modText)
+	if zh then
+		zh = zh:lower()
+		if zh:find(searchStr, 1, true) then
+			return 1
+		end
+		if #words > 1 then
+			for i = 1, #words do
+				if not zh:find(words[i], 1, true) then
+					return nil
+				end
+			end
+			return 2
+		end
+		return nil
+	end
 	if #words > 1 then
 		local allFound = true
 		for i = 1, #words do

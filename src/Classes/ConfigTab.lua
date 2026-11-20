@@ -198,6 +198,14 @@ function ConfigTabClass:ConfigTab(build)
 			if not err and match then
 				return true
 			end
+			-- The option is drawn in Chinese, so a Chinese query has to match
+			-- the translation rather than the English source label.
+			if POB_I18N then
+				local zh = POB_I18N.TranslatedName(StripEscapes(varData.label or ""))
+				if zh and zh:lower():find(searchStr, 1, true) then
+					return true
+				end
+			end
 			return false
 		end
 		return true

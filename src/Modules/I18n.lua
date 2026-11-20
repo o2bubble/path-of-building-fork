@@ -707,7 +707,13 @@ function i18n.CheckForUpdates(onProgress, onDone)
 	end)
 end
 
+-- Answers computed from the dictionary, keyed by the drawn string. Declared
+-- here so a reload can drop them.
+local translationCache, colourCache = { }, { }
+
 function i18n.Load(dataDir, locale)
+	for k in pairs(translationCache) do translationCache[k] = nil end
+	for k in pairs(colourCache) do colourCache[k] = nil end
 	i18n.baseDir = dataDir
 	i18n.entries = { }
 	-- Lowercased view of the keys. Every search predicate lowercases the
@@ -944,7 +950,7 @@ end
 
 -- Translate one drawn string. Returns the input unchanged when there is no
 -- exact hit, which is the common case for runtime-built text.
-function i18n.Translate(text)
+local function translateImpl(text)
 	if not i18n.loaded or type(text) ~= "string" or #text == 0 then return text end
 
 	local direct = probeExact(text)
@@ -1122,6 +1128,21 @@ function i18n.Translate(text)
 		end
 	end
 
+	-- The essence and beast-craft dropdowns wrap the modifier in brackets and
+	-- follow it with the affix type: "谵妄精华   [26% increased Chaos Damage]
+	-- (Suffix)". The brackets are decoration, the text inside is a modifier
+	-- the dictionary knows, so translate inside them and leave the rest to be
+	-- handled as drawn.
+	if #text <= 400 then
+		local prefix, inner, rest = text:match("^(.-)%[([^%[%]]+)%](.*)$")
+		if prefix and inner and #inner > 0 then
+			local hit = i18n.Translate(inner)
+			if hit ~= inner then
+				return prefix .. "[" .. hit .. "]" .. i18n.Translate(rest)
+			end
+		end
+	end
+
 	-- A "(Disabled)" / "(Active)" suffix on an otherwise unknown label. Only
 	-- the parenthesised tail is looked up, and only when it is a known entry,
 	-- so this cannot invent a translation for arbitrary trailing text.
@@ -1154,8 +1175,42 @@ function i18n.Translate(text)
 	return text
 end
 
+-- A drawn string resolves to the same output for as long as the dictionary is
+-- loaded, and lists redraw the same rows every frame -- a long affix dropdown
+-- paid the full lookup on every one of them, 0.8 ms each, which is over a
+-- frame's budget at 25 rows. Remember the answer, misses included: a miss is
+-- the expensive case, because a miss is what scans a bucket to the end.
+local CACHE_LIMIT = 40000
+local cacheSize = 0
+
+-- The cache is keyed by arbitrary drawn strings, so its size is counted
+-- rather than taken with the length operator, which is only defined for a
+-- sequence.
+local function cached(cache, text, compute)
+	local state = cache[text]
+	if state ~= nil then return state end
+	local out = compute(text)
+	if cacheSize >= CACHE_LIMIT then
+		-- Clearing wholesale keeps this from growing with every build loaded;
+		-- the next frame repopulates what is on screen in one pass. Both
+		-- caches go, so the counter below stays an accurate total.
+		for k in pairs(cache) do cache[k] = nil end
+		for k in pairs(translationCache) do translationCache[k] = nil end
+		for k in pairs(colourCache) do colourCache[k] = nil end
+		cacheSize = 0
+	end
+	cache[text] = out
+	cacheSize = cacheSize + 1
+	return out
+end
+
+function i18n.Translate(text)
+	if type(text) ~= "string" then return text end
+	return cached(translationCache, text, translateImpl)
+end
+
 -- Translate a string that may carry colour escapes, keeping the escapes.
-function i18n.TranslateColoured(text)
+local function translateColouredImpl(text)
 	if not i18n.loaded or type(text) ~= "string" then return text end
 	local direct = probeExact(text)
 	if direct then return direct end
@@ -1172,8 +1227,13 @@ function i18n.TranslateColoured(text)
 	-- one at a time -- which, once any fragment hits, would otherwise stop
 	-- the whole-line lookup from ever running and leave the rest in English.
 	local plain = table.concat(parts)
-	local whole = i18n.Translate(plain)
-	if whole ~= plain then return whole end
+	-- A bracketed modifier is handled by the per-fragment path below, which
+	-- puts the colour codes back where they were; taking the whole line here
+	-- would return the translation without them.
+	if not plain:find("[", 1, true) then
+		local whole = i18n.Translate(plain)
+		if whole ~= plain then return whole end
+	end
 
 	local changed = false
 	for i = 1, #parts do
@@ -1187,12 +1247,20 @@ function i18n.TranslateColoured(text)
 	end
 	if not changed then return text end
 
+	-- splitEscapes records codes[i] as the code that follows parts[i], so it
+	-- has to be emitted after it. (Putting it before moved a mid-string code
+	-- to the front of the line once the text after it started translating.)
 	local out = { }
 	for i = 1, #parts do
-		if codes[i] then out[#out + 1] = codes[i] end
 		out[#out + 1] = parts[i]
+		if codes[i] then out[#out + 1] = codes[i] end
 	end
 	return table.concat(out)
+end
+
+function i18n.TranslateColoured(text)
+	if type(text) ~= "string" then return text end
+	return cached(colourCache, text, translateColouredImpl)
 end
 
 -- ==== search ===============================================================

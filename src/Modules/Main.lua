@@ -137,11 +137,12 @@ function main:Init()
 	self.i18nRepoMirror = "https://github.com/o2bubble/path-of-building-i18n"
 	self.i18nAutoUpdate = true
 	-- Program updates resolve against this fork's manifest, never upstream's,
-	-- so applying one cannot overwrite the localized build. Off by default: an
-	-- update replaces files in src/, and a broken commit on the branch would
-	-- break the next launch. LoadSettings applies the saved choice to
-	-- launch.updatesDisabled.
+	-- so applying one cannot overwrite the localized build. An update replaces
+	-- files in src/, and the branch is the localization itself, so this fork
+	-- does not offer the choice at all: the setting exists only so the
+	-- Settings.xml field round-trips, and LoadSettings never turns updates on.
 	self.programAutoUpdate = false
+	launch.updatesDisabled = true
 
 	if not SetDPIScaleOverridePercent then SetDPIScaleOverridePercent = function(scale) end end
 
@@ -738,13 +739,13 @@ function main:LoadSettings(ignoreBuild)
 				if node.attrib.i18nAutoUpdate then
 					self.i18nAutoUpdate = node.attrib.i18nAutoUpdate == "true"
 				end
+				-- A saved "true" is read so an existing Settings.xml still loads,
+				-- but it is not acted on: program updates stay off in this fork.
 				if node.attrib.programAutoUpdate then
 					self.programAutoUpdate = node.attrib.programAutoUpdate == "true"
 				end
-				-- Launch defaults updates off; this is where the saved choice
-				-- takes effect. Ctrl+U and the 12-hour check both read the flag
-				-- at call time, so nothing else has to change.
-				launch.updatesDisabled = not self.programAutoUpdate
+				self.programAutoUpdate = false
+				launch.updatesDisabled = true
 				if POB_I18N then
 					POB_I18N.repoUrl = self.i18nRepo
 					POB_I18N.repoMirror = self.i18nRepoMirror
@@ -1089,15 +1090,15 @@ function main:OpenOptionsPopup(savedState)
 			return self.i18nStatus or ""
 		end)
 		nextRow()
-		-- Program updates resolve against this fork's manifest. Off by default:
-		-- an update replaces files in src/, so a broken commit on the branch
-		-- would break the next launch.
-		controls.programAutoUpdate = new("CheckBoxControl"):CheckBoxControl({ "TOPLEFT", controls.sectionAnchor, "TOPLEFT" }, { currentX + defaultLabelPlacementX, currentY, 20 }, "^7Check for program updates on startup", function(state)
-			self.programAutoUpdate = state
-			launch.updatesDisabled = not state
-		end)
-		controls.programAutoUpdate.labelRight = true
-		controls.programAutoUpdate.state = self.programAutoUpdate
+		-- Program updates are switched off outright in this fork, with no
+		-- control to turn them back on: an update replaces files in src/ from
+		-- the fork's own branch, and the branch is the localization. Applying
+		-- one can only overwrite the translated sources, so the upgrade path
+		-- is to install a new release package. launch.updatesDisabled stays
+		-- true for the process, which also disables the 12-hour check, the
+		-- Ctrl+U shortcut and the buttons in the bottom bar.
+		self.programAutoUpdate = false
+		launch.updatesDisabled = true
 		nextRow()
 	end
 

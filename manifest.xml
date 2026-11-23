@@ -419,7 +419,7 @@
 	<File name="Modules/ToastNotification.lua" part="program" sha1="87abe18f2c81a8df77e7e79248730e81ca5e03c5" />
 	<File name="Modules/Utils.lua" part="program" sha1="7fcb8936ef089aa9472d69920e206afe7cecf3c8" />
 	<File name="UpdateApply.lua" part="program" sha1="d7e47a29feff219c1ec3c6e4a19eb85b47691c26" />
-	<File name="UpdateCheck.lua" part="program" sha1="99040b033c4e5d64a77471718b5d7290415affac" />
+	<File name="UpdateCheck.lua" part="program" sha1="b9e98e09d2c12c6aef51ef16fb737884507a7ebb" />
 	<File name="abseil_dll.dll" part="runtime" platform="win32" sha1="45e6db4e610088af894c0f462680e49b7ba9de04" />
 	<File name="brotlicommon.dll" part="runtime" platform="win32" sha1="5d22d94cec08dec6b9dede32eb7253c4d14a7414" />
 	<File name="brotlidec.dll" part="runtime" platform="win32" sha1="82f02cb25f403ce566fac8a7588e34e97e3ff8ed" />

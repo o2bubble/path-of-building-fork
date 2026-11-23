@@ -92,6 +92,36 @@ local function downloadFile(source, file, outName)
 	return true
 end
 
+-- jsdelivr refuses any package over 50 MB and this fork's repository is far
+-- larger, so a file it has not cached comes back as a short error page under
+-- HTTP 200 instead of the file. raw has no size cap but rate-limits. Each
+-- host's URL can be rewritten into the other's, so a failed mirror costs one
+-- more attempt instead of the whole update.
+local function mirroredSources(source)
+	local owner, repo, branch, rest = source:match("^https://cdn%.jsdelivr%.net/gh/([^/]+)/([^/@]+)@([^/]+)/(.*)$")
+	if owner then
+		return { source, "https://raw.githubusercontent.com/"..owner.."/"..repo.."/"..branch.."/"..rest }
+	end
+	owner, repo, branch, rest = source:match("^https://raw%.githubusercontent%.com/([^/]+)/([^/]+)/([^/]+)/(.*)$")
+	if owner then
+		return { source, "https://cdn.jsdelivr.net/gh/"..owner.."/"..repo.."@"..branch.."/"..rest }
+	end
+	return { source }
+end
+
+local function fileMatches(path, expected)
+	if not expected then
+		return false
+	end
+	local file = io.open(path, "rb")
+	if not file then
+		return false
+	end
+	local content = file:read("*all")
+	file:close()
+	return expected == sha1(content) or expected == sha1(content:gsub("\n", "\r\n"))
+end
+
 ConPrintf("Checking for update...")
 
 -- Use built-in helpers to obtain absolute paths without spawning a shell.
@@ -100,11 +130,37 @@ scriptPath = scriptPath or scriptFallback or "."
 local runtimePath, runtimeFallback = GetRuntimePath()
 runtimePath = runtimePath or runtimeFallback or scriptPath
 
+-- The released zip is flat: the manifest, the launcher and the program files
+-- all share one folder. A source-tree run (src/ next to runtime/) puts the
+-- manifest one level above the Lua files, which Launch.lua already accepts
+-- (src/Launch.lua:93); accept it here too, or that run fails with "Invalid
+-- local manifest".
+local localManXML = xml.LoadXMLFile(scriptPath.."/manifest.xml")
+local manifestDir = scriptPath
+if not localManXML then
+	local parentXML = xml.LoadXMLFile(scriptPath.."/../manifest.xml")
+	if parentXML then
+		localManXML = parentXML
+		manifestDir = scriptPath.."/.."
+	end
+end
+
+-- Where a manifest entry lives on disk. In the flat zip every part resolves to
+-- the package folder; in the source tree the runtime sits in runtime/ and the
+-- manifest's own part one level up. Both cases collapse to the same rule.
+local function filePath(part, name)
+	if part == "runtime" then
+		return runtimePath .. "/" .. name
+	elseif part == "default" then
+		return manifestDir .. "/" .. name
+	end
+	return scriptPath .. "/" .. name
+end
+
 -- Load and process local manifest
 local localVer
 local localPlatform, localBranch
 local localFiles = { }
-local localManXML = xml.LoadXMLFile(scriptPath.."/manifest.xml")
 local localSource
 local runtimeExecutable
 if localManXML and localManXML[1].elem == "PoBVersion" then
@@ -121,11 +177,7 @@ if localManXML and localManXML[1].elem == "PoBVersion" then
 			elseif node.elem == "File" then
 				local fullPath
 				node.attrib.name = node.attrib.name:gsub("{space}", " ")
-				if node.attrib.part == "runtime" then
-					fullPath = runtimePath .. "/" .. node.attrib.name
-				else
-					fullPath = scriptPath .. "/" .. node.attrib.name
-				end
+				fullPath = filePath(node.attrib.part, node.attrib.name)
 				localFiles[node.attrib.name] = { sha1 = node.attrib.sha1, part = node.attrib.part, platform = node.attrib.platform, fullPath = fullPath }
 				if node.attrib.part == "runtime" and node.attrib.name:match("Path of Building") then
 					runtimeExecutable = fullPath
@@ -144,7 +196,13 @@ localSource = localSource:gsub("{branch}", localBranch)
 local remoteVer
 local remoteFiles = { }
 local remoteSources = { }
-local remoteManText, errMsg = downloadFileText(localSource, "manifest.xml")
+local remoteManText, errMsg
+for _, candidate in ipairs(mirroredSources(localSource)) do
+	remoteManText, errMsg = downloadFileText(candidate, "manifest.xml")
+	if remoteManText then
+		break
+	end
+end
 if not remoteManText then
 	ConPrintf("Update check failed: couldn't download version manifest")
 	return nil, "Couldn't download version manifest.\nReason: "..errMsg.."\nCheck your internet connectivity.\nIf you are using a proxy, specify it in Options."
@@ -162,12 +220,7 @@ if remoteManXML and remoteManXML[1].elem == "PoBVersion" then
 				remoteSources[node.attrib.part][node.attrib.platform or "any"] = node.attrib.url
 			elseif node.elem == "File" then
 				if not node.attrib.platform or node.attrib.platform == localPlatform then
-					local fullPath
-					if node.attrib.part == "runtime" then
-						fullPath = runtimePath .. "/" .. node.attrib.name
-					else
-						fullPath = scriptPath .. "/" .. node.attrib.name
-					end
+					local fullPath = filePath(node.attrib.part, node.attrib.name)
 					remoteFiles[node.attrib.name] = { sha1 = node.attrib.sha1, part = node.attrib.part, platform = node.attrib.platform, fullPath = fullPath }
 				end
 			end
@@ -218,12 +271,75 @@ end
 MakeDir("Update")
 ConPrintf("Downloading update...")
 
--- Download changelog
-downloadFile(localSource, "changelog.txt", scriptPath.."/changelog.txt")
+-- Download changelog. A mirror answering with an error page under HTTP 200
+-- must not replace the changelog already on disk, so the fetched copy only
+-- takes the old one's place once it matches the manifest.
+local changelogPath = manifestDir.."/changelog.txt"
+local changelogSha = remoteFiles["changelog.txt"] and remoteFiles["changelog.txt"].sha1
+local changelogFetched = false
+for _, candidate in ipairs(mirroredSources(localSource)) do
+	downloadFile(candidate, "changelog.txt", changelogPath..".tmp")
+	if fileMatches(changelogPath..".tmp", changelogSha) then
+		os.remove(changelogPath)
+		os.rename(changelogPath..".tmp", changelogPath)
+		changelogFetched = true
+		break
+	end
+end
+if not changelogFetched then
+	os.remove(changelogPath..".tmp")
+	ConPrintf("Couldn't fetch the changelog; keeping the one already on disk")
+end
 
 -- Download files that need updating
 local failedFile = false
 local zipFiles = { }
+
+-- One attempt at one host: fetch the file, or extract it from the part's zip,
+-- and report whether what landed on disk matches the manifest.
+local function fetchFromSource(source, data, fileName)
+	local zipName = source:match("/([^/]+%.zip)$")
+	if not zipName then
+		if fileMatches(fileName, data.sha1) then
+			ConPrintf("Using file from previous update attempt '%s'", fileName)
+		else
+			ConPrintf("Downloading %s...", data.name)
+			downloadFile(source, data.name, fileName)
+		end
+		return fileMatches(fileName, data.sha1)
+	end
+	local zipFileName = scriptPath.."/Update/"..zipName
+	if not zipFiles[zipFileName] then
+		ConPrintf("Downloading %s...", zipName)
+		downloadFile(source, "", zipFileName)
+		zipFiles[zipFileName] = lzip.open(zipFileName)
+	end
+	local zip = zipFiles[zipFileName]
+	if zip then
+		local zippedFile = zip:OpenFile(data.name)
+		if zippedFile then
+			local file = io.open(fileName, "wb+")
+			file:write(zippedFile:Read("*a"))
+			file:close()
+			zippedFile:Close()
+		else
+			ConPrintf("Couldn't extract '%s' from '%s' (extract failed)", data.name, zipName)
+		end
+	else
+		ConPrintf("Couldn't extract '%s' from '%s' (zip open failed)", data.name, zipName)
+	end
+	if fileMatches(fileName, data.sha1) then
+		return true
+	end
+	-- Truncated or the wrong archive: discard it so the next host starts clean.
+	if zip then
+		pcall(zip.Close, zip)
+		zipFiles[zipFileName] = nil
+	end
+	os.remove(zipFileName)
+	return false
+end
+
 for index, data in ipairs(updateFiles) do
 	if UpdateProgress then
 		UpdateProgress("Downloading %d/%d", index, #updateFiles)
@@ -241,60 +357,22 @@ for index, data in ipairs(updateFiles) do
 		source = source:gsub("{branch}", localBranch)
 		local fileName = scriptPath.."/Update/"..data.name:gsub("[\\/]","{slash}")
 		data.updateFileName = fileName
-		local zipName = source:match("/([^/]+%.zip)$")
-		if zipName then
-			if not zipFiles[zipName] then
-				ConPrintf("Downloading %s...", zipName)
-				local zipFileName = scriptPath.."/Update/"..zipName
-				downloadFile(source, "", zipFileName)
-				zipFiles[zipName] = lzip.open(zipFileName)
+		local fetched = false
+		for _, candidate in ipairs(mirroredSources(source)) do
+			if fetchFromSource(candidate, data, fileName) then
+				fetched = true
+				break
 			end
-			local zip = zipFiles[zipName]
-			if zip then
-				local zippedFile = zip:OpenFile(data.name)
-				if zippedFile then
-					local file = io.open(fileName, "wb+")
-					file:write(zippedFile:Read("*a"))
-					file:close()
-					zippedFile:Close()
-				else
-					ConPrintf("Couldn't extract '%s' from '%s' (extract failed)", data.name, zipName)
-				end
-			else
-				ConPrintf("Couldn't extract '%s' from '%s' (zip open failed)", data.name, zipName)
-			end
-		else
-			local skipDownload
-			local file = io.open(fileName, "rb")
-			if file then
-				local content = file:read("*all")
-				if data.sha1 == sha1(content) or data.sha1 == sha1(content:gsub("\n", "\r\n")) then
-					ConPrintf("Using file from previous update attempt '%s'", fileName)
-					skipDownload = true
-				end
-				file:close()
-			end
-			if not skipDownload then
-				ConPrintf("Downloading %s... (%d of %d)", data.name, index, #updateFiles)
-				downloadFile(source, data.name, fileName)
-			end
+			ConPrintf("Source '%s' did not yield '%s'", candidate, data.name)
 		end
-		local file = io.open(fileName, "rb")
-		if not file then
+		if not fetched then
 			failedFile = true
-		else
-			local content = file:read("*all")
-			if data.sha1 ~= sha1(content) and data.sha1 ~= sha1(content:gsub("\n", "\r\n")) then
-				ConPrintf("Hash mismatch on '%s'", fileName)
-				failedFile = true
-			end
-			file:close()
 		end
 	end
 end
 for name, zip in pairs(zipFiles) do
 	zip:Close()
-	os.remove(scriptPath.."/Update/"..name)
+	os.remove(name)
 end
 if failedFile then
 	ConPrintf("Update failed: one or more files couldn't be downloaded")

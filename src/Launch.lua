@@ -66,6 +66,16 @@ local function i18n_locale()
 	return nil -- resolved from the manifest once the directory is known
 end
 
+function GetVirtualScreenSize()
+	local width, height = GetScreenSize()
+	local scale = GetScreenScale and GetScreenScale() or 1.0
+	if scale ~= 1.0 then
+		width = math.floor(width / scale)
+		height = math.floor(height / scale)
+	end
+	return width, height
+end
+
 function launch:OnInit()
 	self.devMode = false
 	self.installedMode = false
